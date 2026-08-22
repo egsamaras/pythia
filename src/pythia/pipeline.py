@@ -81,6 +81,7 @@ def run_scan(
                 evidence_ids=evidence_ids,
                 mode=draft.mode,
                 basis=draft.basis,
+                region=draft.region,
             )
         detail = f"{len(drafts)} new forecasts from {len(batch)} articles"
         if feed_errors:

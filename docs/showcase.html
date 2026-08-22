@@ -1,0 +1,464 @@
+<title>Pythia</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Marcellus&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<style>
+  :root {
+    --page: #0d0d0d;
+    --surface: #1a1a19;
+    --surface-2: #232322;
+    --ink: #ffffff;
+    --ink-2: #c3c2b7;
+    --muted: #898781;
+    --hairline: #2c2c2a;
+    --border: rgba(255, 255, 255, 0.10);
+    --accent: #3987e5;
+    --accent-soft: #86b6ef;
+    --accent-deep: #104281;
+    --good: #0ca30c;
+    --display: "Marcellus", "Times New Roman", Georgia, serif;
+    --body: "IBM Plex Sans", system-ui, -apple-system, "Segoe UI", sans-serif;
+    --mono: "IBM Plex Mono", ui-monospace, "SF Mono", Menlo, monospace;
+  }
+  * { box-sizing: border-box; margin: 0; }
+  html { scroll-behavior: smooth; }
+  body {
+    background: var(--page);
+    color: var(--ink-2);
+    font-family: var(--body);
+    font-size: 16px;
+    line-height: 1.65;
+    -webkit-font-smoothing: antialiased;
+  }
+  .wrap { max-width: 960px; margin: 0 auto; padding: 0 28px; }
+
+  /* ---------- hero ---------- */
+  .hero { padding: 96px 0 72px; border-bottom: 1px solid var(--hairline); }
+  .eye {
+    width: 54px; height: 54px; border-radius: 50%;
+    background:
+      radial-gradient(circle at 50% 47%, var(--accent) 0 26%, transparent 28%),
+      radial-gradient(circle at 50% 50%, transparent 55%, var(--accent-deep) 57% 100%);
+    border: 1px solid var(--border);
+    margin-bottom: 36px;
+  }
+  .maxim {
+    font-family: var(--mono);
+    font-size: 12px;
+    letter-spacing: 0.32em;
+    color: var(--accent-soft);
+    text-transform: uppercase;
+    margin-bottom: 18px;
+  }
+  .maxim .tr { color: var(--muted); letter-spacing: 0.08em; text-transform: none; }
+  h1 {
+    font-family: var(--display);
+    font-weight: 400;
+    font-size: clamp(56px, 9vw, 104px);
+    letter-spacing: 0.14em;
+    line-height: 1.05;
+    color: var(--ink);
+    text-wrap: balance;
+  }
+  .thesis {
+    max-width: 34em;
+    margin-top: 26px;
+    font-size: 20px;
+    line-height: 1.6;
+    color: var(--ink-2);
+    text-wrap: balance;
+  }
+  .thesis strong { color: var(--ink); font-weight: 500; }
+
+  .stats {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(130px, 1fr));
+    gap: 1px;
+    background: var(--hairline);
+    border: 1px solid var(--hairline);
+    margin-top: 56px;
+  }
+  .stat { background: var(--page); padding: 18px 18px 16px; }
+  .stat b {
+    display: block;
+    font-family: var(--mono);
+    font-weight: 500;
+    font-size: 26px;
+    color: var(--ink);
+  }
+  .stat span { font-size: 12px; color: var(--muted); letter-spacing: 0.04em; }
+
+  /* ---------- sections ---------- */
+  section { padding: 72px 0; border-bottom: 1px solid var(--hairline); }
+  .eyebrow {
+    font-family: var(--mono);
+    font-size: 12px;
+    letter-spacing: 0.32em;
+    text-transform: uppercase;
+    color: var(--accent-soft);
+    margin-bottom: 10px;
+  }
+  .eyebrow .tr { color: var(--muted); letter-spacing: 0.08em; text-transform: none; }
+  h2 {
+    font-family: var(--display);
+    font-weight: 400;
+    font-size: clamp(30px, 4.4vw, 42px);
+    letter-spacing: 0.03em;
+    color: var(--ink);
+    text-wrap: balance;
+    margin-bottom: 14px;
+  }
+  .lede { max-width: 40em; color: var(--ink-2); margin-bottom: 40px; }
+  .lede strong { color: var(--ink); font-weight: 500; }
+
+  /* ---------- the loop ---------- */
+  .loop { display: flex; flex-direction: column; gap: 0; }
+  .step {
+    display: grid;
+    grid-template-columns: 72px 1fr;
+    gap: 20px;
+    padding: 22px 0;
+    border-top: 1px solid var(--hairline);
+  }
+  .step:last-child { border-bottom: 1px solid var(--hairline); }
+  .step .n {
+    font-family: var(--display);
+    font-size: 30px;
+    color: var(--accent);
+    line-height: 1.2;
+  }
+  .step h3 { font-size: 17px; font-weight: 600; color: var(--ink); margin-bottom: 4px; }
+  .step p { font-size: 15px; max-width: 46em; }
+  .step p code, .sci li code {
+    font-family: var(--mono); font-size: 0.85em;
+    background: var(--surface); border: 1px solid var(--hairline);
+    border-radius: 4px; padding: 1px 6px; color: var(--ink-2);
+    white-space: nowrap;
+  }
+
+  /* ---------- modes ---------- */
+  .modes { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 16px; }
+  .mode {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 22px 22px 20px;
+    display: flex; flex-direction: column; gap: 12px;
+  }
+  .mode .tag {
+    align-self: flex-start;
+    font-family: var(--mono); font-size: 12px; letter-spacing: 0.06em;
+    color: var(--ink-2);
+    border: 1px solid var(--border); border-radius: 999px;
+    padding: 3px 12px;
+  }
+  .mode h3 { font-family: var(--display); font-weight: 400; font-size: 22px; color: var(--ink); }
+  .mode .q { font-size: 14.5px; min-height: 3.2em; }
+  .example {
+    border-top: 1px solid var(--hairline);
+    padding-top: 14px;
+    font-size: 13.5px;
+    color: var(--muted);
+  }
+  .example .fc { color: var(--ink-2); }
+  .example .p {
+    font-family: var(--mono); font-weight: 500; color: var(--accent-soft);
+    white-space: nowrap;
+  }
+  .meter { height: 6px; border-radius: 3px; background: var(--accent-deep); margin-top: 10px; overflow: hidden; }
+  .meter i { display: block; height: 100%; background: var(--accent); border-radius: 3px 0 0 3px; }
+
+  /* ---------- science ---------- */
+  .sci { list-style: none; padding: 0; display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 14px; }
+  .sci li {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 18px 20px;
+    font-size: 14.5px;
+  }
+  .sci b { display: block; color: var(--ink); font-weight: 600; font-size: 15px; margin-bottom: 5px; }
+
+  /* ---------- rigor ---------- */
+  .rigor { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 16px; margin-bottom: 28px; }
+  .rig {
+    border-left: 2px solid var(--accent-deep);
+    padding: 4px 0 4px 18px;
+  }
+  .rig b {
+    display: block; font-family: var(--mono); font-weight: 500;
+    font-size: 32px; color: var(--ink); line-height: 1.15;
+  }
+  .rig span { font-size: 13px; color: var(--muted); }
+  .rigor-note { max-width: 44em; font-size: 15px; }
+  .rigor-note strong { color: var(--ink); font-weight: 500; }
+
+  /* ---------- roadmap ---------- */
+  .horizon { margin-top: 36px; }
+  .horizon + .horizon { margin-top: 44px; }
+  .hz {
+    display: flex; align-items: baseline; gap: 14px;
+    border-bottom: 1px solid var(--hairline); padding-bottom: 10px; margin-bottom: 18px;
+  }
+  .hz h3 { font-family: var(--display); font-weight: 400; font-size: 24px; color: var(--ink); letter-spacing: 0.04em; }
+  .hz span { font-size: 13px; color: var(--muted); }
+  .plans { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 14px; }
+  .plan {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 18px 20px;
+    font-size: 14.5px;
+    transition: border-color 0.25s ease, transform 0.25s ease;
+  }
+  .plan:hover { border-color: rgba(134, 182, 239, 0.45); transform: translateY(-2px); }
+  .plan b { display: block; color: var(--ink); font-weight: 600; font-size: 15.5px; margin-bottom: 5px; }
+  .plan .wow { color: var(--accent-soft); }
+
+  /* ---------- footer ---------- */
+  footer { padding: 48px 0 72px; }
+  footer .sig {
+    font-family: var(--mono); font-size: 12.5px; color: var(--muted);
+    letter-spacing: 0.04em; line-height: 2;
+  }
+  footer .disc { margin-top: 18px; font-size: 12.5px; color: var(--muted); max-width: 52em; }
+
+  /* ---------- motion (hidden state only when JS is running) ---------- */
+  .js .rev { opacity: 0; transform: translateY(14px); transition: opacity 0.6s ease, transform 0.6s ease; }
+  .js .rev.on { opacity: 1; transform: none; }
+  @media (prefers-reduced-motion: reduce) {
+    html { scroll-behavior: auto; }
+    .js .rev { opacity: 1; transform: none; transition: none; }
+    .plan { transition: none; }
+  }
+  @media (max-width: 620px) {
+    .hero { padding-top: 64px; }
+    .step { grid-template-columns: 44px 1fr; }
+  }
+</style>
+
+<header class="hero wrap">
+  <div class="eye" aria-hidden="true"></div>
+  <p class="maxim">ΠΥΘΙΑ <span class="tr">· the oracle that keeps score</span></p>
+  <h1>PYTHIA</h1>
+  <p class="thesis">A self-measuring forecasting system. It reads the world's news,
+  states the odds of what happens next — <strong>and is scored on every answer it
+  ever gives.</strong> Runs entirely on one laptop, on an open local model, with the
+  Claude API a single key away.</p>
+  <div class="stats">
+    <div class="stat"><b>24</b><span>verified news sources</span></div>
+    <div class="stat"><b>3</b><span>forecasting methods</span></div>
+    <div class="stat"><b>132</b><span>tests, all offline</span></div>
+    <div class="stat"><b>6,309</b><span>lines, one commit history</span></div>
+    <div class="stat"><b>0.25</b><span>the Brier score of a coin flip — the line to beat</span></div>
+  </div>
+</header>
+
+<section class="wrap rev">
+  <p class="eyebrow">ΕΠΟΥ ΘΕΩΙ <span class="tr">· follow the signal</span></p>
+  <h2>The loop</h2>
+  <p class="lede">Five stages, each feeding the next. The last one closes the circle:
+  the system's measured record changes how it forecasts tomorrow.</p>
+  <div class="loop">
+    <div class="step"><div class="n">I</div><div>
+      <h3>Ingest</h3>
+      <p>24 feeds fetched concurrently — global wires, FT and The Economist, Gulf press,
+      the Fed, ECB and Bank of England, plus Google News query feeds tuned to GCC banking,
+      regional regulators, OPEC and AI regulation. Every scan records its exact reading
+      list, so any forecast can be traced to the headlines behind it.</p>
+    </div></div>
+    <div class="step"><div class="n">II</div><div>
+      <h3>Forecast</h3>
+      <p>The oracle turns a source-balanced batch into concrete, falsifiable statements
+      with probabilities and deadlines. The output schema forces it to write its
+      reasoning <em>before</em> committing the number — base rate first, probability last.</p>
+    </div></div>
+    <div class="step"><div class="n">III</div><div>
+      <h3>Resolve</h3>
+      <p>When deadlines pass, the oracle re-reads the news and <em>proposes</em> outcomes
+      with cited evidence. A human confirms every resolution — the ledger's integrity is
+      never delegated to the model that is being graded.</p>
+    </div></div>
+    <div class="step"><div class="n">IV</div><div>
+      <h3>Update</h3>
+      <p>New evidence moves open forecasts the way a real forecaster's credence moves —
+      revisions are automatic, cited, bounded by guards against drift and hindsight,
+      and kept in a full audit history on every card.</p>
+    </div></div>
+    <div class="step"><div class="n">V</div><div>
+      <h3>Learn</h3>
+      <p>Once 30 forecasts have resolved, Pythia's measured miscalibration — <em>"in the
+      70–80% range you said 75%, but 20% happened"</em> — is fed back into its own
+      forecasting prompt. It corrects itself from evidence, not vibes.</p>
+    </div></div>
+  </div>
+</section>
+
+<section class="wrap rev">
+  <p class="eyebrow">ΜΕΛΕΤΗ ΤΟ ΠΑΝ <span class="tr">· practice is everything</span></p>
+  <h2>Three ways it predicts</h2>
+  <p class="lede">Every forecast declares its method, and each method is scored
+  separately — so the ledger reveals not just <strong>whether</strong> the system
+  forecasts well, but <strong>which kind of thinking</strong> earns its keep.</p>
+  <div class="modes">
+    <div class="mode">
+      <span class="tag">◆ event</span>
+      <h3>Will it happen?</h3>
+      <p class="q">The news says something may happen. Pythia states the odds that it
+      actually does.</p>
+      <div class="example">
+        <span class="fc">"The EU imposes new sanctions on Iran by September 15."</span>
+        <span class="p"> — 65%</span>
+        <div class="meter"><i style="width:65%"></i></div>
+      </div>
+    </div>
+    <div class="mode">
+      <span class="tag">→ consequence</span>
+      <h3>What follows?</h3>
+      <p class="q">The downstream outcome the articles never state — with the causal
+      chain written out and judged.</p>
+      <div class="example">
+        <span class="fc">"Trade dispute → tariffs → Canadian exports to the US fall by year-end."</span>
+        <span class="p"> — 50%</span>
+        <div class="meter"><i style="width:50%"></i></div>
+      </div>
+    </div>
+    <div class="mode">
+      <span class="tag">⟲ precedent</span>
+      <h3>What does history say?</h3>
+      <p class="q">Reference-class forecasting: the closest past episodes, their base
+      rate, and the adjustment for today.</p>
+      <div class="example">
+        <span class="fc">"6 of 8 emergency OPEC meetings since 2008 ended in a quota cut."</span>
+        <span class="p"> — the basis, auditable</span>
+        <div class="meter"><i style="width:75%"></i></div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section class="wrap rev">
+  <p class="eyebrow">ΓΝΩΘΙ ΣΑΥΤΟΝ <span class="tr">· know thyself</span></p>
+  <h2>The science that keeps it honest</h2>
+  <p class="lede">Most AI demos ask to be believed. Pythia asks to be <strong>checked</strong> —
+  the design borrows its discipline from forecasting research, not from chatbots.</p>
+  <ul class="sci">
+    <li><b>Reason before number</b>Under constrained decoding, models emit fields in
+    schema order — so the schema puts base rate and causal chain before the probability,
+    making the number condition on the reasoning instead of justifying it afterwards.</li>
+    <li><b>Time-weighted scoring</b>A resolved forecast is scored on its average credence
+    across its whole open life. A last-minute jump to 95% counts only for the sliver of
+    time it was held — the ledger measures sustained judgment, and cannot be gamed.</li>
+    <li><b>The human gate</b>The oracle proposes; you resolve. Absence from a small news
+    batch is never treated as proof, post-horizon revisions are refused as hindsight,
+    and every "happened" must cite its articles.</li>
+    <li><b>Noise never becomes instruction</b>Calibration feedback reaches the prompt
+    only past 30 resolutions, and only for biases exceeding twice their binomial
+    standard error. Below that, silence.</li>
+    <li><b>Every claim carries its evidence</b>Forecasts link their motivating articles,
+    proposals cite their proof, revisions keep their history, and each scan's full
+    reading digest is one click away.</li>
+    <li><b>On-premise by default</b>The live oracle is a local open model via Ollama —
+    nothing leaves the machine. Set <code>ANTHROPIC_API_KEY</code> and it switches to
+    Claude Opus 5 in seconds, and the ledger will say which one forecasts better.</li>
+  </ul>
+</section>
+
+<section class="wrap rev">
+  <p class="eyebrow">ΜΗΔΕΝ ΑΓΑΝ <span class="tr">· nothing in excess</span></p>
+  <h2>Built like it handles money</h2>
+  <div class="rigor">
+    <div class="rig"><b>5</b><span>adversarial multi-agent review rounds</span></div>
+    <div class="rig"><b>115</b><span>reviewer &amp; verifier agents deployed</span></div>
+    <div class="rig"><b>76</b><span>confirmed findings — every one fixed</span></div>
+    <div class="rig"><b>20</b><span>plausible findings refuted before wasting a fix</span></div>
+  </div>
+  <p class="rigor-note">Every feature passed the same gauntlet: specialist reviewers
+  attacked the design — correctness, security, forecasting methodology, UX — and a
+  second wave of agents tried to <strong>refute each finding</strong> before anything
+  was changed. The survivors included genuinely deep catches: a schema field-order that
+  quietly defeated base-rate anchoring, and a scoring rule that would have let the
+  system flatter its own track record. Each fix is pinned by tests, validated live
+  against a real 22B model on real news, and committed to version control.</p>
+</section>
+
+<section class="wrap rev">
+  <p class="eyebrow">ΟΨΕΙ ΤΟ ΜΕΛΛΟΝ <span class="tr">· you will see what is coming</span></p>
+  <h2>What's next</h2>
+  <p class="lede">The machinery is in place. What follows turns a personal oracle into
+  an institutional instrument.</p>
+
+  <div class="horizon">
+    <div class="hz"><h3>Now</h3><span>weeks — the data flywheel spins up</span></div>
+    <div class="plans">
+      <div class="plan"><b>The Model Arena</b><span class="wow">A private LLM forecasting
+      leaderboard on your own hardware.</span> Every forecast already records its model —
+      run Mistral, Gemma and Claude on the same news and let the Brier ledger declare,
+      with evidence, which model actually sees the future best.</div>
+      <div class="plan"><b>The morning ritual</b>The scheduled daily run is one
+      <code style="font-family:var(--mono);font-size:0.85em">launchctl</code> command away:
+      wake to fresh forecasts, a due-queue to resolve over coffee, and a brief of what
+      changed overnight.</div>
+      <div class="plan"><b>Calibration in the open</b>As resolutions accumulate, the
+      calibration curve becomes the centrepiece — the one chart that says whether the
+      oracle can be trusted, updated daily.</div>
+    </div>
+  </div>
+
+  <div class="horizon">
+    <div class="hz"><h3>Next</h3><span>the quarter — from oracle to benchmark</span></div>
+    <div class="plans">
+      <div class="plan"><b>Market showdown</b><span class="wow">Pythia vs the wisdom of
+      crowds.</span> Overlay its probabilities against Polymarket and Metaculus on
+      overlapping questions — instant, external, unforgiving calibration.</div>
+      <div class="plan"><b>The calibration league</b>Analysts log their own probability
+      beside the oracle's; both get scored. A forecasting-discipline programme in the
+      Tetlock tradition, disguised as a dashboard.</div>
+      <div class="plan"><b>Self-settling markets</b>Price-linked forecasts ("Brent above
+      $95 by November") resolve automatically from market data — the ledger grows
+      without human effort.</div>
+    </div>
+  </div>
+
+  <div class="horizon">
+    <div class="hz"><h3>Beyond</h3><span>the year — the institutional instrument</span></div>
+    <div class="plans">
+      <div class="plan"><b>Regulatory horizon radar</b><span class="wow">Early warning as
+      a product.</span> Pointed at SAMA, CBB and SDAIA signals, precedent-mode forecasting
+      becomes a probabilistic radar for what regulators do next — briefed to risk and
+      strategy before the circulars land.</div>
+      <div class="plan"><b>Bank-grade deployment</b>The same code, on-premise on serious
+      hardware, with larger open models — an air-gap-friendly forecasting capability no
+      vendor can switch off.</div>
+      <div class="plan"><b>Reading the region in its own words</b>Arabic-language source
+      ingestion, so the oracle reads the Gulf directly rather than through translation.</div>
+    </div>
+  </div>
+</section>
+
+<footer class="wrap rev">
+  <p class="sig">
+    pythia · main@0551beb · python 3.12 / fastapi / sqlite / vanilla js<br>
+    oracle backends: ollama (mistral-small:22b) · claude opus 5<br>
+    132 tests · zero network required to verify
+  </p>
+  <p class="disc">Forecasts are probabilistic estimates generated by a language model
+  for research and experimentation. They are not advice — financial, investment, or
+  otherwise. The Pythia of Delphi spoke in riddles; this one shows her working.</p>
+</footer>
+
+<script>
+  (function () {
+    document.documentElement.classList.add("js");
+    var reduced = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+    var els = document.querySelectorAll(".rev");
+    if (reduced || !("IntersectionObserver" in window)) {
+      els.forEach(function (el) { el.classList.add("on"); });
+      return;
+    }
+    var io = new IntersectionObserver(function (entries) {
+      entries.forEach(function (e) {
+        if (e.isIntersecting) { e.target.classList.add("on"); io.unobserve(e.target); }
+      });
+    }, { threshold: 0.12 });
+    els.forEach(function (el) { io.observe(el); });
+  })();
+</script>

@@ -81,18 +81,29 @@ Set `PYTHIA_ANTHROPIC_FALLBACKS=0` to disable.
 ## News sources
 
 The active source list lives in [feeds.txt](feeds.txt) — one URL per line,
-`#` for comments; edit it and restart the server. It ships with ~24 verified
-feeds: global news (BBC, Guardian, NYT, WSJ, Sky, France 24, DW), business &
-markets (MarketWatch, CNBC, FT, The Economist), Middle East / GCC (Arab News,
-The National, Middle East Eye), central banks (Fed, ECB, Bank of England), and
-**Google News query feeds** — topic-targeted searches (GCC banking, Gulf
-regulators, OPEC, AI regulation) that also surface Reuters/Bloomberg stories,
-which have no public RSS of their own.
+`#` for comments; edit it and restart the server. It ships with ~48 verified
+feeds across seven groups: global news (BBC, Guardian, NYT, WSJ, Sky,
+France 24, DW), business & markets (MarketWatch, CNBC, FT, The Economist),
+**conflict & security analysis** (Crisis Group, War on the Rocks, Defense One,
+Breaking Defense, The War Zone, Foreign Policy, CFR), **government primary
+sources** (UN press, US travel advisories, Pentagon, White House, UK FCDO,
+IAEA), regional depth (Arab News, The National, Middle East Eye, SCMP, Nikkei
+Asia, The Hindu, AllAfrica, MercoPress), **Bluesky account feeds**
+(`bsky.app/profile/<handle>/rss` — add any handle you trust; X/Twitter has no
+free API, but much of the OSINT community posts on Bluesky), and **Google News
+query feeds** — topic radar plus early-warning searches (mobilization,
+embassy evacuations, martial law/coups, ISW assessments, sanctions
+designations) that also surface Reuters/Bloomberg stories. Query-feed items
+are labeled "(via Google News)" so curated and uncurated publishers never
+blur.
 
-Feeds are fetched concurrently, capped at 25 entries each per fetch, and the
-analysis batch is balanced round-robin across sources so one prolific feed
-cannot crowd out the rest. Precedence: `PYTHIA_FEEDS` env var >
-`PYTHIA_FEEDS_FILE` > `feeds.txt` in the project root > a built-in minimal list.
+Feeds are fetched concurrently and capped at 25 entries each per fetch. The
+analysis batch pools the newest few articles **per feed** (so a
+weekly-publishing analysis shop is never drowned out by the wires) and
+round-robins across feeds; in-place republications — a travel advisory
+escalating under the same URL — refresh the stored article and re-enter the
+pool. Precedence: `PYTHIA_FEEDS` env var > `PYTHIA_FEEDS_FILE` > `feeds.txt`
+in the project root > a built-in minimal list.
 
 ## The forecasting loop
 
@@ -101,7 +112,9 @@ cannot crowd out the rest. Precedence: `PYTHIA_FEEDS` env var >
    duplicates).
 2. **Forecasts** — each has a falsifiable statement, a probability (0.01–0.99),
    a horizon date, a category, a rationale, and links to the motivating
-   articles. Every forecast uses one of three **modes**:
+   articles, and a **region** tag — the region primarily affected, or
+   `global` when the consequences are worldwide — filterable in the
+   dashboard. Every forecast uses one of three **modes**:
    - **event** — the news says something may happen; will it actually happen?
    - **consequence** — a downstream outcome the articles don't discuss (market
      move, policy response), with the causal chain stated in *basis*.

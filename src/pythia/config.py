@@ -39,6 +39,20 @@ DEFAULT_FEEDS: tuple[str, ...] = (
     "https://feeds.content.dowjones.io/public/rss/mw_topstories",
 )
 
+# Geographic scope of a forecast. "global" is reserved for events whose
+# consequences are clearly worldwide; everything else names the region
+# primarily affected.
+REGIONS: tuple[str, ...] = (
+    "global",
+    "north_america",
+    "latin_america",
+    "europe",
+    "mena",
+    "sub_saharan_africa",
+    "south_central_asia",
+    "east_asia_pacific",
+)
+
 # Fixed category list; the dashboard assigns each category a fixed palette slot,
 # so the order here is part of the contract (color follows the entity).
 CATEGORIES: tuple[str, ...] = (

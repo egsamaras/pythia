@@ -79,6 +79,24 @@ def test_non_object_raises() -> None:
         validate_drafts(["not", "a", "dict"], n_articles=3, today=TODAY)
 
 
+def test_region_captured_defaulted_and_validated() -> None:
+    tagged = _forecast(region="mena")
+    untagged = _forecast()
+    bogus = _forecast(region="atlantis")
+    drafts = validate_drafts(
+        {"forecasts": [tagged, untagged, bogus]}, n_articles=3, today=TODAY
+    )
+    assert [d.region for d in drafts] == ["mena", "global"]  # bogus dropped
+
+
+def test_schema_and_prompt_carry_regions() -> None:
+    from pythia.config import REGIONS
+
+    props = FORECAST_JSON_SCHEMA["properties"]["forecasts"]["items"]["properties"]
+    assert props["region"]["enum"] == list(REGIONS)
+    assert '"global" only when the consequences are clearly worldwide' in SYSTEM_PROMPT
+
+
 def test_mode_and_basis_are_captured() -> None:
     raw = {
         "forecasts": [

@@ -54,6 +54,7 @@ class FakeOracle:
                 evidence_indices=[],
                 mode="precedent",
                 basis="7 of 9 comparable episodes since 2000",
+                region="mena",
             ),
         ]
 
@@ -108,6 +109,7 @@ def test_health(client: TestClient, monkeypatch: pytest.MonkeyPatch) -> None:
     assert body["ollama_reachable"] is False
     assert "geopolitics" in body["categories"]
     assert body["modes"] == ["event", "consequence", "precedent"]
+    assert body["regions"][0] == "global" and "mena" in body["regions"]
 
 
 def test_health_reports_unavailable_backend(
@@ -137,6 +139,8 @@ def test_scan_pipeline_to_predictions(
     assert by_mode["event"]["evidence"][0]["title"] == "Synthetic headline"
     assert by_mode["consequence"]["basis"].startswith("stress ->")
     assert by_mode["precedent"]["basis"] == "7 of 9 comparable episodes since 2000"
+    assert by_mode["precedent"]["region"] == "mena"
+    assert by_mode["event"]["region"] == "global"
     assert all(p["status"] == "open" and p["due"] is False for p in preds)
 
 

@@ -17,7 +17,13 @@ from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 
 from pythia import pipeline, scoring, store
-from pythia.config import CATEGORIES, LEGACY_DB_PATH, db_path_is_default, get_settings
+from pythia.config import (
+    CATEGORIES,
+    LEGACY_DB_PATH,
+    REGIONS,
+    db_path_is_default,
+    get_settings,
+)
 from pythia.oracle import OracleError
 from pythia.oracle.base import MODES
 from pythia.oracle.ollama_oracle import ollama_available
@@ -76,6 +82,7 @@ def health() -> dict[str, Any]:
         "ollama_reachable": ollama_available(settings.ollama_url),
         "categories": list(CATEGORIES),
         "modes": list(MODES),
+        "regions": list(REGIONS),
     }
 
 

@@ -12,7 +12,7 @@ from dataclasses import dataclass
 from datetime import date, timedelta
 from typing import Any, Protocol
 
-from pythia.config import CATEGORIES
+from pythia.config import CATEGORIES, REGIONS
 
 logger = logging.getLogger(__name__)
 
@@ -41,6 +41,7 @@ FORECAST_JSON_SCHEMA: dict[str, Any] = {
                     "statement": {"type": "string"},
                     "mode": {"type": "string", "enum": list(MODES)},
                     "category": {"type": "string", "enum": list(CATEGORIES)},
+                    "region": {"type": "string", "enum": list(REGIONS)},
                     "horizon_date": {"type": "string"},
                     "basis": {"type": "string"},
                     "rationale": {"type": "string"},
@@ -55,6 +56,7 @@ FORECAST_JSON_SCHEMA: dict[str, Any] = {
                     "statement",
                     "mode",
                     "category",
+                    "region",
                     "horizon_date",
                     "basis",
                     "rationale",
@@ -108,6 +110,10 @@ range rather than clustering on 0.5, but reserve values above 0.90 or below \
 {MAX_HORIZON_DAYS} days from today, chosen so the event will clearly have or \
 have not happened by then.
 - category is one of: {", ".join(CATEGORIES)}.
+- region is the region primarily affected, one of: {", ".join(REGIONS)}. \
+Use "global" only when the consequences are clearly worldwide — major-power \
+conflict, global markets or supply chains, pandemics — not merely newsworthy \
+everywhere.
 - rationale: 1-3 sentences naming the signals in the news.
 - basis: may be empty for mode "event"; for "consequence" the causal chain \
 (required); for "precedent" the reference class and its base rate (required).
@@ -281,6 +287,7 @@ class ForecastDraft:
     evidence_indices: list[int]
     mode: str = "event"
     basis: str = ""
+    region: str = "global"
 
 
 @dataclass(frozen=True)
@@ -413,6 +420,7 @@ def validate_drafts(raw: Any, n_articles: int, today: date) -> list[ForecastDraf
             rationale = str(f.get("rationale", "")).strip()
             mode = str(f.get("mode", "event")).strip().lower()
             basis = str(f.get("basis", "")).strip()
+            region = str(f.get("region", "global")).strip().lower()
             evidence = [
                 int(e) for e in f.get("evidence_indices", []) if 0 <= int(e) < n_articles
             ][:6]  # schema cap, enforced here for backends that ignore maxItems
@@ -435,6 +443,9 @@ def validate_drafts(raw: Any, n_articles: int, today: date) -> list[ForecastDraf
         if mode not in MODES:
             logger.warning("dropping forecast %d: unknown mode %r", i, mode)
             continue
+        if region not in REGIONS:
+            logger.warning("dropping forecast %d: unknown region %r", i, region)
+            continue
         if mode != "event" and not basis:
             # basis is the audit trail for these modes; without it the mode
             # label is unverifiable and would pollute the per-mode Brier.
@@ -453,6 +464,7 @@ def validate_drafts(raw: Any, n_articles: int, today: date) -> list[ForecastDraf
                 evidence_indices=evidence,
                 mode=mode,
                 basis=basis,
+                region=region,
             )
         )
     if not drafts:

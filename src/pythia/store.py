@@ -20,7 +20,8 @@ CREATE TABLE IF NOT EXISTS articles (
     url          TEXT NOT NULL UNIQUE,
     summary      TEXT NOT NULL DEFAULT '',
     published_at TEXT NOT NULL,
-    fetched_at   TEXT NOT NULL
+    fetched_at   TEXT NOT NULL,
+    origin       TEXT NOT NULL DEFAULT ''
 );
 CREATE INDEX IF NOT EXISTS idx_articles_published ON articles (published_at DESC);
 
@@ -62,6 +63,7 @@ CREATE TABLE IF NOT EXISTS predictions (
     scan_id         INTEGER NOT NULL REFERENCES scans (id),
     statement       TEXT NOT NULL,
     mode            TEXT NOT NULL DEFAULT 'event',
+    region          TEXT NOT NULL DEFAULT 'global',
     probability     REAL NOT NULL,
     horizon_date    TEXT NOT NULL,
     category        TEXT NOT NULL,
@@ -114,6 +116,7 @@ def _ensure_prediction_columns(conn: sqlite3.Connection) -> None:
     additions = {
         "mode": "TEXT NOT NULL DEFAULT 'event'",
         "basis": "TEXT NOT NULL DEFAULT ''",
+        "region": "TEXT NOT NULL DEFAULT 'global'",
         "resolution_evidence_ids": "TEXT NOT NULL DEFAULT '[]'",
         "proposal_outcome": "INTEGER",
         "proposal_note": "TEXT",
@@ -127,6 +130,9 @@ def _ensure_prediction_columns(conn: sqlite3.Connection) -> None:
     scan_cols = {row["name"] for row in conn.execute("PRAGMA table_info(scans)")}
     if "kind" not in scan_cols:
         conn.execute("ALTER TABLE scans ADD COLUMN kind TEXT NOT NULL DEFAULT 'forecast'")
+    article_cols = {row["name"] for row in conn.execute("PRAGMA table_info(articles)")}
+    if "origin" not in article_cols:
+        conn.execute("ALTER TABLE articles ADD COLUMN origin TEXT NOT NULL DEFAULT ''")
 
 
 def migrate_legacy_db(legacy_path: Path, target_path: Path) -> bool:
@@ -162,21 +168,42 @@ def migrate_legacy_db(legacy_path: Path, target_path: Path) -> bool:
 
 
 def upsert_articles(db_path: Path, articles: list[dict[str, Any]]) -> int:
-    """Insert articles, ignoring URLs already stored. Returns rows inserted."""
+    """Insert articles; refresh a stored URL when it was republished newer.
+
+    Government advisory feeds update entries in place under a stable URL —
+    an escalation must replace the stale text and re-enter the recency pool.
+    Returns rows inserted or refreshed.
+    """
     now = _now_iso()
-    inserted = 0
+    changed = 0
     with connect(db_path) as conn:
         for a in articles:
             cur = conn.execute(
                 """
-                INSERT INTO articles (source, title, url, summary, published_at, fetched_at)
-                VALUES (?, ?, ?, ?, ?, ?)
-                ON CONFLICT (url) DO NOTHING
+                INSERT INTO articles
+                    (source, title, url, summary, published_at, fetched_at, origin)
+                VALUES (?, ?, ?, ?, ?, ?, ?)
+                ON CONFLICT (url) DO UPDATE SET
+                    source = excluded.source,
+                    title = excluded.title,
+                    summary = excluded.summary,
+                    published_at = excluded.published_at,
+                    fetched_at = excluded.fetched_at,
+                    origin = excluded.origin
+                WHERE excluded.published_at > articles.published_at
                 """,
-                (a["source"], a["title"], a["url"], a.get("summary", ""), a["published_at"], now),
+                (
+                    a["source"],
+                    a["title"],
+                    a["url"],
+                    a.get("summary", ""),
+                    a["published_at"],
+                    now,
+                    a.get("origin", ""),
+                ),
             )
-            inserted += cur.rowcount
-    return inserted
+            changed += cur.rowcount
+    return changed
 
 
 def recent_articles(db_path: Path, limit: int = 50) -> list[dict[str, Any]]:
@@ -194,19 +221,46 @@ def recent_articles(db_path: Path, limit: int = 50) -> list[dict[str, Any]]:
 
 
 def recent_articles_balanced(
-    db_path: Path, limit: int, pool_factor: int = 4
+    db_path: Path, limit: int, per_origin: int = 4, max_age_days: int = 14
 ) -> list[dict[str, Any]]:
-    """Newest articles, round-robin balanced across sources.
+    """Recent articles, round-robin balanced across originating feeds.
 
-    Draws from a pool of the ``limit * pool_factor`` newest articles and takes
-    one per source in rotation (sources ordered by their newest article), so a
-    prolific feed cannot crowd the analysis batch out of diversity.
+    The pool is the newest ``per_origin`` articles per FEED (window function),
+    not a global newest-N slice — so a weekly-publishing analysis source is
+    always present alongside high-volume wires, and a query feed's many
+    publishers still count as one feed. Rotation takes one article per feed
+    (feeds ordered by their newest article) until ``limit``. Rows older than
+    ``max_age_days`` are excluded so stale items cannot resurface forever;
+    legacy rows without an origin fall back to their source label.
     """
-    pool = recent_articles(db_path, limit=limit * pool_factor)
-    by_source: dict[str, list[dict[str, Any]]] = {}
+    cutoff = (
+        datetime.now(timezone.utc) - timedelta(days=max_age_days)
+    ).isoformat(timespec="seconds")
+    with connect(db_path) as conn:
+        rows = conn.execute(
+            """
+            WITH ranked AS (
+                SELECT id, source, title, url, summary, published_at, origin,
+                       ROW_NUMBER() OVER (
+                           PARTITION BY CASE WHEN origin != '' THEN origin ELSE source END
+                           ORDER BY published_at DESC
+                       ) AS rn
+                FROM articles
+                WHERE published_at >= ?
+            )
+            SELECT id, source, title, url, summary, published_at, origin
+            FROM ranked
+            WHERE rn <= ?
+            ORDER BY published_at DESC
+            """,
+            (cutoff, per_origin),
+        ).fetchall()
+    pool = [dict(r) for r in rows]
+    by_feed: dict[str, list[dict[str, Any]]] = {}
     for article in pool:  # pool is newest-first; insertion order keeps recency
-        by_source.setdefault(article["source"], []).append(article)
-    queues = list(by_source.values())
+        key = article["origin"] or article["source"]
+        by_feed.setdefault(key, []).append(article)
+    queues = list(by_feed.values())
     batch: list[dict[str, Any]] = []
     while len(batch) < limit and queues:
         queues = [q for q in queues if q]
@@ -419,19 +473,21 @@ def insert_prediction(
     evidence_ids: list[int],
     mode: str = "event",
     basis: str = "",
+    region: str = "global",
 ) -> int:
     with connect(db_path) as conn:
         cur = conn.execute(
             """
             INSERT INTO predictions
-                (scan_id, statement, mode, probability, horizon_date, category,
-                 rationale, basis, evidence_ids, created_at)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                (scan_id, statement, mode, region, probability, horizon_date,
+                 category, rationale, basis, evidence_ids, created_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
             (
                 scan_id,
                 statement,
                 mode,
+                region,
                 probability,
                 horizon_date,
                 category,
@@ -448,8 +504,8 @@ def insert_prediction(
 
 def list_predictions(db_path: Path, status: str | None = None) -> list[dict[str, Any]]:
     query = """
-        SELECT id, scan_id, statement, mode, probability, horizon_date, category,
-               rationale, basis, evidence_ids, created_at, status, outcome,
+        SELECT id, scan_id, statement, mode, region, probability, horizon_date,
+               category, rationale, basis, evidence_ids, created_at, status, outcome,
                resolved_at, resolution_note, resolution_evidence_ids,
                proposal_outcome, proposal_note, proposal_evidence_ids, proposal_at
         FROM predictions

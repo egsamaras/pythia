@@ -86,9 +86,10 @@ def test_parse_feed_google_news_extracts_publisher() -> None:
     url = "https://news.google.com/rss/search?q=rates"
     articles = parse_feed(url, _rss_with_items(items))
     assert articles[0]["title"] == "Rates held steady"
-    assert articles[0]["source"] == "Reuters"
+    assert articles[0]["source"] == "Reuters (via Google News)"
     assert articles[1]["title"] == "Plain headline without separator"
     assert articles[1]["source"] == "Google News"
+    assert all(a["origin"] == url for a in articles)  # provenance for balancing
 
 
 def test_parse_feed_non_google_titles_with_hyphens_untouched() -> None:
@@ -99,6 +100,19 @@ def test_parse_feed_non_google_titles_with_hyphens_untouched() -> None:
     articles = parse_feed("https://example.com/rss", _rss_with_items(items))
     assert articles[0]["title"] == "Supply - demand gap widens"
     assert articles[0]["source"] == "Bulk Feed"
+
+
+def test_parse_feed_titleless_entries_fall_back_to_summary() -> None:
+    # Bluesky post feeds (and some gov feeds) have no <title>, only a body.
+    items = (
+        "<item><description>Ukraine hits Russian oil terminal overnight, officials say.</description>"
+        "<link>https://bsky.app/profile/kyivindependent.com/post/abc</link></item>"
+    )
+    url = "https://bsky.app/profile/kyivindependent.com/rss"
+    articles = parse_feed(url, _rss_with_items(items))
+    assert len(articles) == 1
+    assert articles[0]["title"].startswith("Ukraine hits Russian oil terminal")
+    assert articles[0]["source"] == "@kyivindependent.com (Bluesky)"
 
 
 def test_parse_feed_applies_friendly_source_label() -> None:

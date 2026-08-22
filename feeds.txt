@@ -32,11 +32,48 @@ https://www.federalreserve.gov/feeds/press_all.xml
 https://www.ecb.europa.eu/rss/press.html
 https://www.bankofengland.co.uk/rss/news
 
+# --- Conflict & security analysis ---
+https://www.crisisgroup.org/rss
+https://warontherocks.com/feed/
+https://www.defenseone.com/rss/all/
+https://breakingdefense.com/feed/
+https://www.twz.com/feed
+https://foreignpolicy.com/feed/
+https://feeds.cfr.org/publication/rss.xml
+
+# --- Government & institutional (primary sources) ---
+https://press.un.org/en/rss.xml
+https://travel.state.gov/_res/rss/TAsTWs.xml
+https://www.defense.gov/DesktopModules/ArticleCS/RSS.ashx?ContentType=1&Site=945&max=20
+https://www.whitehouse.gov/news/feed/
+https://www.gov.uk/government/organisations/foreign-commonwealth-development-office.atom
+https://www.iaea.org/feeds/topnews
+
+# --- Regional depth ---
+https://www.scmp.com/rss/91/feed
+https://asia.nikkei.com/rss/feed/nar
+https://www.thehindu.com/news/international/feeder/default.rss
+https://allafrica.com/tools/headlines/rdf/latest/headlines.rdf
+https://en.mercopress.com/rss/
+
+# --- Credible voices (Bluesky account RSS: bsky.app/profile/<handle>/rss) ---
+# Add handles you trust; each account's posts arrive labeled "@handle (Bluesky)".
+https://bsky.app/profile/kyivindependent.com/rss
+
 # --- Topic radar (Google News query feeds; edit queries freely) ---
 https://news.google.com/rss/search?q=GCC+OR+%22Gulf+Cooperation+Council%22+banking&hl=en-US&gl=US&ceid=US:en
 https://news.google.com/rss/search?q=%22Central+Bank+of+Bahrain%22+OR+%22Saudi+Central+Bank%22+OR+SAMA&hl=en-US&gl=US&ceid=US:en
 https://news.google.com/rss/search?q=OPEC+oil+production&hl=en-US&gl=US&ceid=US:en
 https://news.google.com/rss/search?q=%22AI+regulation%22+OR+%22EU+AI+Act%22&hl=en-US&gl=US&ceid=US:en
 
-# Known-blocked (bot protection, rechecked 2026-08-21): Al Jazeera,
-# Al Arabiya, Khaleej Times, Gulf News, Zawya, IMF, BIS.
+# --- Early-warning radar (Google News queries) ---
+https://news.google.com/rss/search?q=%22military+buildup%22+OR+%22troop+movements%22+OR+%22military+mobilization%22+OR+%22partial+mobilization%22&hl=en-US&gl=US&ceid=US:en
+https://news.google.com/rss/search?q=%22embassy+evacuation%22+OR+%22do+not+travel%22+OR+%22citizens+to+leave%22&hl=en-US&gl=US&ceid=US:en
+https://news.google.com/rss/search?q=%22martial+law%22+OR+%22ceasefire+agreement%22+OR+%22coup+attempt%22+OR+%22military+coup%22&hl=en-US&gl=US&ceid=US:en
+https://news.google.com/rss/search?q=%22Institute+for+the+Study+of+War%22&hl=en-US&gl=US&ceid=US:en
+https://news.google.com/rss/search?q=OFAC+OR+%22new+sanctions%22+OR+%22sanctions+designations%22&hl=en-US&gl=US&ceid=US:en
+
+# Known-blocked (bot protection, rechecked 2026-08-22): Al Jazeera,
+# Al Arabiya, Khaleej Times, Gulf News, Zawya, IMF, BIS, ISW (direct; use the
+# Google News query above), RAND, NATO, OFAC (direct), Times of Israel,
+# Kyiv Independent site RSS (their Bluesky feed works), Reddit (rate limits).

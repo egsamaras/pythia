@@ -29,6 +29,15 @@ def test_upsert_articles_deduplicates_on_url(db: Path) -> None:
     assert len(store.recent_articles(db)) == 1
 
 
+def _ts(hours_ago: float) -> str:
+    """Timestamp relative to now, so age-window tests never rot."""
+    from datetime import datetime, timedelta, timezone
+
+    return (datetime.now(timezone.utc) - timedelta(hours=hours_ago)).isoformat(
+        timespec="seconds"
+    )
+
+
 def test_recent_articles_balanced_across_sources(db: Path) -> None:
     articles = []
     # Wire A floods with 10 newer articles; Wire B has 3 older ones.
@@ -38,7 +47,7 @@ def test_recent_articles_balanced_across_sources(db: Path) -> None:
                 "source": "Wire A",
                 "title": f"A{i}",
                 "url": f"https://a.example/{i}",
-                "published_at": f"2026-08-20T12:{i:02d}:00+00:00",
+                "published_at": _ts(hours_ago=10 - i),
             }
         )
     for i in range(3):
@@ -47,7 +56,7 @@ def test_recent_articles_balanced_across_sources(db: Path) -> None:
                 "source": "Wire B",
                 "title": f"B{i}",
                 "url": f"https://b.example/{i}",
-                "published_at": f"2026-08-19T12:{i:02d}:00+00:00",
+                "published_at": _ts(hours_ago=30 - i),
             }
         )
     store.upsert_articles(db, articles)
@@ -68,7 +77,7 @@ def test_recent_articles_balanced_fills_from_remaining_sources(db: Path) -> None
             "source": "Wire A",
             "title": f"A{i}",
             "url": f"https://a.example/{i}",
-            "published_at": f"2026-08-20T12:{i:02d}:00+00:00",
+            "published_at": _ts(hours_ago=10 - i),
         }
         for i in range(8)
     ] + [
@@ -76,13 +85,90 @@ def test_recent_articles_balanced_fills_from_remaining_sources(db: Path) -> None
             "source": "Wire B",
             "title": "B0",
             "url": "https://b.example/0",
-            "published_at": "2026-08-20T13:00:00+00:00",
+            "published_at": _ts(hours_ago=1),
         }
     ]
     store.upsert_articles(db, articles)
     batch = store.recent_articles_balanced(db, limit=5)
     assert len(batch) == 5  # B exhausts after 1; A fills the rest
     assert sum(1 for a in batch if a["source"] == "Wire B") == 1
+
+
+def test_balanced_pool_is_per_feed_not_global_recency(db: Path) -> None:
+    # A prolific wire publishes 30 fresh items; a weekly analysis source
+    # published once, five days ago. The slow source must still make the batch.
+    flood = [
+        {
+            "source": "Fast Wire", "title": f"F{i}", "url": f"https://f.example/{i}",
+            "published_at": _ts(hours_ago=i * 0.1), "origin": "https://f.example/rss",
+        }
+        for i in range(30)
+    ]
+    slow = [{
+        "source": "Weekly Analysis", "title": "Deep dive",
+        "url": "https://slow.example/1", "published_at": _ts(hours_ago=120),
+        "origin": "https://slow.example/rss",
+    }]
+    store.upsert_articles(db, flood + slow)
+    batch = store.recent_articles_balanced(db, limit=5)
+    assert any(a["source"] == "Weekly Analysis" for a in batch)
+    assert sum(1 for a in batch if a["source"] == "Fast Wire") == 4  # per-feed cap
+
+
+def test_balanced_collapses_query_feed_publishers_into_one_queue(db: Path) -> None:
+    gnews = "https://news.google.com/rss/search?q=x"
+    fanout = [
+        {
+            "source": f"Publisher {i} (via Google News)", "title": f"G{i}",
+            "url": f"https://g.example/{i}", "published_at": _ts(hours_ago=i * 0.1),
+            "origin": gnews,
+        }
+        for i in range(6)
+    ]
+    direct = [
+        {
+            "source": "Crisis Group", "title": f"C{i}", "url": f"https://c.example/{i}",
+            "published_at": _ts(hours_ago=24 + i), "origin": "https://c.example/rss",
+        }
+        for i in range(2)
+    ]
+    store.upsert_articles(db, fanout + direct)
+    batch = store.recent_articles_balanced(db, limit=4)
+    # Two feeds -> even split, despite six distinct publisher labels.
+    assert sum(1 for a in batch if a["origin"] == gnews) == 2
+    assert sum(1 for a in batch if a["source"] == "Crisis Group") == 2
+
+
+def test_balanced_excludes_stale_articles(db: Path) -> None:
+    store.upsert_articles(
+        db,
+        [
+            {
+                "source": "Old Wire", "title": "Ancient", "url": "https://o.example/1",
+                "published_at": _ts(hours_ago=24 * 30), "origin": "https://o.example/rss",
+            }
+        ],
+    )
+    assert store.recent_articles_balanced(db, limit=5) == []
+
+
+def test_upsert_refreshes_in_place_republication(db: Path) -> None:
+    url = "https://travel.example/iraq-advisory"
+    original = {
+        "source": "US Travel Advisories", "title": "Iraq - Level 2",
+        "url": url, "published_at": _ts(hours_ago=24 * 20), "origin": "https://travel.example/rss",
+    }
+    assert store.upsert_articles(db, [original]) == 1
+    # Same URL republished with the same timestamp: no change.
+    assert store.upsert_articles(db, [original]) == 0
+    # Escalated in place under the same URL with a newer timestamp: refreshed.
+    escalated = dict(original, title="Iraq - Level 4: Do Not Travel", published_at=_ts(hours_ago=1))
+    assert store.upsert_articles(db, [escalated]) == 1
+    stored = store.recent_articles(db)[0]
+    assert stored["title"] == "Iraq - Level 4: Do Not Travel"
+    # An older republication never downgrades the stored row.
+    assert store.upsert_articles(db, [original]) == 0
+    assert store.recent_articles(db)[0]["title"] == "Iraq - Level 4: Do Not Travel"
 
 
 def test_scan_lifecycle(db: Path) -> None:
@@ -135,10 +221,17 @@ def test_mode_and_basis_roundtrip_and_per_mode_pairs(db: Path) -> None:
         horizon_date="2026-09-30", category="economy", rationale="",
         evidence_ids=[], mode="precedent", basis="7 of 9 past episodes",
     )
+    region_id = store.insert_prediction(
+        db, scan_id=scan_id, statement="R", probability=0.5,
+        horizon_date="2026-09-30", category="geopolitics", rationale="",
+        evidence_ids=[], region="mena",
+    )
     preds = {p["id"]: p for p in store.list_predictions(db)}
     assert preds[event_id]["mode"] == "event"
+    assert preds[event_id]["region"] == "global"  # default
     assert preds[prec_id]["mode"] == "precedent"
     assert preds[prec_id]["basis"] == "7 of 9 past episodes"
+    assert preds[region_id]["region"] == "mena"
 
     store.resolve_prediction(db, event_id, True)
     store.resolve_prediction(db, prec_id, False)
@@ -174,6 +267,7 @@ def test_init_db_migrates_pre_mode_schema(tmp_path: Path) -> None:
     preds = store.list_predictions(old_db)
     assert preds[0]["mode"] == "event"  # legacy rows default to first-order
     assert preds[0]["basis"] == ""
+    assert preds[0]["region"] == "global"
     assert preds[0]["proposal_outcome"] is None
     assert preds[0]["proposal_evidence_ids"] == []
 

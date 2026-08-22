@@ -21,6 +21,17 @@ const MODE_META = {
   precedent: { icon: "⟲", label: "precedent" },
 };
 
+const REGION_LABELS = {
+  global: "Global",
+  north_america: "North America",
+  latin_america: "Latin America",
+  europe: "Europe",
+  mena: "MENA",
+  sub_saharan_africa: "Sub-Saharan Africa",
+  south_central_asia: "South & Central Asia",
+  east_asia_pacific: "East Asia & Pacific",
+};
+
 const state = {
   predictions: [],
   stats: null,
@@ -29,6 +40,7 @@ const state = {
   filterStatus: "open",
   filterCategory: "all",
   filterMode: "all",
+  filterRegion: "all",
   scanPollTimer: null,
   calibrationAsTable: false,
   digestFor: null,       // scan id whose digest is expanded
@@ -152,6 +164,15 @@ async function refreshHealth() {
         opt.value = mode;
         opt.textContent = mode;
         modeSelect.appendChild(opt);
+      }
+    }
+    const regionSelect = document.getElementById("region-filter");
+    if (regionSelect.options.length === 1 && health.regions) {
+      for (const region of health.regions) {
+        const opt = document.createElement("option");
+        opt.value = region;
+        opt.textContent = REGION_LABELS[region] || region;
+        regionSelect.appendChild(opt);
       }
     }
   } catch {
@@ -338,6 +359,9 @@ function visiblePredictions() {
   if (state.filterMode !== "all") {
     preds = preds.filter((p) => p.mode === state.filterMode);
   }
+  if (state.filterRegion !== "all") {
+    preds = preds.filter((p) => (p.region || "global") === state.filterRegion);
+  }
   const bySoonestHorizon = (a, b) => a.horizon_date.localeCompare(b.horizon_date);
   const byLatestResolved = (a, b) => (b.resolved_at || "").localeCompare(a.resolved_at || "");
   return [...preds].sort(
@@ -373,6 +397,9 @@ function forecastCard(p) {
   meta.appendChild(chip);
   const mm = MODE_META[p.mode] || MODE_META.event;
   meta.appendChild(el("span", "mode-chip", `${mm.icon} ${mm.label}`));
+  meta.appendChild(
+    el("span", "mode-chip", REGION_LABELS[p.region] || REGION_LABELS.global)
+  );
   meta.appendChild(el("span", null, `by ${fmtDate(p.horizon_date)}`));
   if (p.due) meta.appendChild(el("span", "badge-due", "⏱ due"));
   if (p.status === "resolved") {
@@ -777,6 +804,10 @@ function initFilters() {
   });
   document.getElementById("mode-filter").addEventListener("change", (ev) => {
     state.filterMode = ev.target.value;
+    renderForecasts();
+  });
+  document.getElementById("region-filter").addEventListener("change", (ev) => {
+    state.filterRegion = ev.target.value;
     renderForecasts();
   });
 }
