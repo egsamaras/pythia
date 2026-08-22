@@ -1,0 +1,42 @@
+# Pythia news sources — one feed URL per line, # for comments.
+# This file is the active source list (verified 2026-08-21). Precedence:
+# PYTHIA_FEEDS env var > PYTHIA_FEEDS_FILE > this file > built-in defaults.
+
+# --- Global news ---
+https://feeds.bbci.co.uk/news/world/rss.xml
+https://www.theguardian.com/world/rss
+https://rss.nytimes.com/services/xml/rss/nyt/World.xml
+https://feeds.a.dj.com/rss/RSSWorldNews.xml
+https://feeds.skynews.com/feeds/rss/world.xml
+https://www.france24.com/en/rss
+https://rss.dw.com/atom/rss-en-world
+
+# --- Business & markets ---
+https://feeds.bbci.co.uk/news/business/rss.xml
+https://feeds.content.dowjones.io/public/rss/mw_topstories
+https://www.cnbc.com/id/100727362/device/rss/rss.html
+https://feeds.a.dj.com/rss/RSSMarketsMain.xml
+https://www.ft.com/rss/home
+https://www.economist.com/finance-and-economics/rss.xml
+
+# --- Technology ---
+https://techcrunch.com/feed/
+
+# --- Middle East / GCC ---
+https://www.arabnews.com/rss.xml
+https://www.thenationalnews.com/arc/outboundfeeds/rss/?outputType=xml
+https://www.middleeasteye.net/rss
+
+# --- Central banks & institutions ---
+https://www.federalreserve.gov/feeds/press_all.xml
+https://www.ecb.europa.eu/rss/press.html
+https://www.bankofengland.co.uk/rss/news
+
+# --- Topic radar (Google News query feeds; edit queries freely) ---
+https://news.google.com/rss/search?q=GCC+OR+%22Gulf+Cooperation+Council%22+banking&hl=en-US&gl=US&ceid=US:en
+https://news.google.com/rss/search?q=%22Central+Bank+of+Bahrain%22+OR+%22Saudi+Central+Bank%22+OR+SAMA&hl=en-US&gl=US&ceid=US:en
+https://news.google.com/rss/search?q=OPEC+oil+production&hl=en-US&gl=US&ceid=US:en
+https://news.google.com/rss/search?q=%22AI+regulation%22+OR+%22EU+AI+Act%22&hl=en-US&gl=US&ceid=US:en
+
+# Known-blocked (bot protection, rechecked 2026-08-21): Al Jazeera,
+# Al Arabiya, Khaleej Times, Gulf News, Zawya, IMF, BIS.

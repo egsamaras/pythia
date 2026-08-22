@@ -1,0 +1,29 @@
+[project]
+name = "pythia"
+version = "0.1.0"
+description = "News-driven probabilistic forecasting: scan feeds, generate calibrated predictions, track the record."
+requires-python = ">=3.12"
+dependencies = [
+    "fastapi==0.141.1",
+    "uvicorn[standard]==0.52.4",
+    "anthropic==1.0.0",
+    "feedparser==6.0.14",
+    "httpx==0.28.1",
+    "pydantic==2.13.4",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest==9.1.1",
+]
+
+[build-system]
+requires = ["setuptools>=69"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["src"]
