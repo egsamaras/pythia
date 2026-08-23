@@ -249,12 +249,17 @@ def build_user_prompt(
     today: date,
     open_statements: list[str],
     track_record: str | None = None,
+    signals: str | None = None,
 ) -> str:
-    """Assemble the per-scan prompt: date, track record, open forecasts, articles."""
+    """Assemble the per-scan prompt: date, track record, signals, forecasts, articles."""
     lines: list[str] = [f"Today's date: {today.isoformat()}", ""]
     if track_record:
         lines.append("Your measured calibration record (learn from it):")
         lines.append(track_record)
+        lines.append("")
+    if signals:
+        lines.append("Structured signals (machine-computed):")
+        lines.append(signals)
         lines.append("")
     if open_statements:
         lines.append("Already open forecasts (do NOT duplicate):")
@@ -317,6 +322,7 @@ class Oracle(Protocol):
         today: date,
         open_statements: list[str],
         track_record: str | None = None,
+        signals: str | None = None,
     ) -> list[ForecastDraft]:
         """Return validated forecast drafts for the given articles."""
         ...

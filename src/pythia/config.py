@@ -71,6 +71,44 @@ def _env(name: str, default: str) -> str:
     return os.environ.get(f"PYTHIA_{name}", default)
 
 
+# GDELT watch queries: named coverage-volume trackers whose escalation ratios
+# are computed each scan and shown to the oracle as structured signals.
+DEFAULT_GDELT_WATCHES: tuple[tuple[str, str], ...] = (
+    ("iran", "iran (military OR nuclear OR sanctions)"),
+    ("russia-ukraine", "ukraine russia (offensive OR strike OR mobilization)"),
+    ("china-taiwan", "taiwan (military OR blockade OR drills)"),
+    ("israel-levant", '(israel OR lebanon OR gaza) (strike OR ceasefire OR escalation)'),
+    ("gulf", '("saudi arabia" OR bahrain OR uae OR opec) (security OR sanctions OR attack)'),
+    # Negative terms keep weather/civic/figurative uses out of the ratios.
+    (
+        "coups-emergencies",
+        '(coup OR "martial law" OR "state of emergency") -hurricane -storm -flood -wildfire -weather',
+    ),
+)
+
+
+def _load_watches_file(path: Path) -> tuple[tuple[str, str], ...]:
+    """Parse a watches file: ``name | query`` per line, # comments ignored."""
+    watches: list[tuple[str, str]] = []
+    for line in path.read_text(encoding="utf-8").splitlines():
+        stripped = line.strip()
+        if not stripped or stripped.startswith("#") or "|" not in stripped:
+            continue
+        name, _, query = stripped.partition("|")
+        if name.strip() and query.strip():
+            watches.append((name.strip(), query.strip()))
+    return tuple(watches)
+
+
+def _resolve_gdelt_watches() -> tuple[tuple[str, str], ...]:
+    path = Path(os.environ.get("PYTHIA_GDELT_WATCHES_FILE", PROJECT_ROOT / "gdelt.txt"))
+    if path.is_file():
+        watches = _load_watches_file(path)
+        if watches:
+            return watches
+    return DEFAULT_GDELT_WATCHES
+
+
 def _load_feeds_file(path: Path) -> tuple[str, ...]:
     """Parse a feeds file: one URL per line, blank lines and # comments ignored."""
     urls: list[str] = []
@@ -113,6 +151,9 @@ class Settings:
     max_articles_ollama: int = 30
     max_resolution_forecasts: int = 20
     auto_update_probabilities: bool = True
+    gdelt_enabled: bool = True
+    gdelt_timeout_s: float = 20.0
+    gdelt_watches: tuple[tuple[str, str], ...] = DEFAULT_GDELT_WATCHES
 
 
 def get_settings() -> Settings:
@@ -138,6 +179,9 @@ def get_settings() -> Settings:
         max_articles_ollama=int(_env("MAX_ARTICLES_OLLAMA", "30")),
         max_resolution_forecasts=int(_env("MAX_RESOLUTION_FORECASTS", "20")),
         auto_update_probabilities=_env("AUTO_UPDATE", "1") not in ("0", "false", "no"),
+        gdelt_enabled=_env("GDELT", "1") not in ("0", "false", "no"),
+        gdelt_timeout_s=float(_env("GDELT_TIMEOUT_S", "20")),
+        gdelt_watches=_resolve_gdelt_watches(),
     )
 
 

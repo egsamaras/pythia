@@ -71,6 +71,8 @@ Set `PYTHIA_ANTHROPIC_FALLBACKS=0` to disable.
 | `PYTHIA_DB` | `~/Library/Application Support/Pythia/pythia.db` | SQLite path |
 | `PYTHIA_MAX_RESOLUTION_FORECASTS` | `20` | open forecasts per resolution check |
 | `PYTHIA_AUTO_UPDATE` | `1` | oracle probability updates on open forecasts |
+| `PYTHIA_GDELT` | `1` | GDELT structured signals per scan |
+| `PYTHIA_GDELT_WATCHES_FILE` | `gdelt.txt` | watch-query definitions |
 | `PYTHIA_FEEDS` | — | comma-separated RSS URLs (overrides the feeds file) |
 | `PYTHIA_FEEDS_FILE` | `feeds.txt` | path to the feeds file |
 | `PYTHIA_FEED_TIMEOUT_S` | `15` | per-feed HTTP timeout |
@@ -96,6 +98,22 @@ embassy evacuations, martial law/coups, ISW assessments, sanctions
 designations) that also surface Reuters/Bloomberg stories. Query-feed items
 are labeled "(via Google News)" so curated and uncurated publishers never
 blur.
+
+### Structured signals (GDELT)
+
+Beyond editorial feeds, each scan reads **GDELT** — the open Global Database
+of Events, Language and Tone, which machine-codes worldwide news in 100+
+languages, keylessly, on a 15-minute cadence. For every watch query in
+[gdelt.txt](gdelt.txt) (Iran, Russia–Ukraine, China–Taiwan, Israel–Levant,
+Gulf, coups/emergencies by default), Pythia pulls the newest worldwide
+articles (labeled "(via GDELT)", non-English items flagged) and computes an
+**escalation ratio** — the last 48 hours of coverage volume against the
+prior 12-day baseline, normalized against total global output. The ratios
+form a snapshot injected into the forecast prompt as machine-computed
+signals, stored on the scan row, and shown in the digest — so what the
+oracle read is always auditable. The snapshot itself carries the caveat:
+coverage volume measures the world's *attention*, not verified events.
+Disable with `PYTHIA_GDELT=0`; a failed pull never blocks a scan.
 
 Feeds are fetched concurrently and capped at 25 entries each per fetch. The
 analysis batch pools the newest few articles **per feed** (so a

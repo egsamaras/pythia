@@ -23,6 +23,7 @@ class FakeOracle:
         today: date,
         open_statements: list[str],
         track_record: str | None = None,
+        signals: str | None = None,
     ) -> list[ForecastDraft]:
         # Relative horizon so assertions never rot as the wall clock advances.
         horizon = (date.today() + timedelta(days=30)).isoformat()
@@ -62,6 +63,7 @@ class FakeOracle:
 @pytest.fixture()
 def settings(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Settings:
     monkeypatch.setenv("PYTHIA_DB", str(tmp_path / "api.db"))
+    monkeypatch.setenv("PYTHIA_GDELT", "0")  # tests never touch the network
     from pythia.config import get_settings
 
     s = get_settings()
@@ -344,7 +346,7 @@ def test_track_record_reaches_the_forecast_prompt(
         provider = "fake"
         model = "fake-1"
 
-        def generate(self, articles, today, open_statements, track_record=None):  # noqa: ANN001
+        def generate(self, articles, today, open_statements, track_record=None, signals=None):  # noqa: ANN001
             captured["track_record"] = track_record
             return FakeOracle().generate(articles, today, open_statements)
 
@@ -361,6 +363,117 @@ def test_track_record_reaches_the_forecast_prompt(
     assert captured["track_record"] is not None
     assert "Brier" in captured["track_record"]
     assert "70-80% range" in captured["track_record"]  # 70% forecast, 20% happened
+
+
+def test_gdelt_signals_flow_into_prompt_scan_row_and_archive(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setenv("PYTHIA_DB", str(tmp_path / "gdelt.db"))
+    monkeypatch.setenv("PYTHIA_GDELT", "1")
+    from pythia.config import get_settings
+    from pythia.gdelt import GdeltResult
+
+    settings = get_settings()
+    store.init_db(settings.db_path)
+
+    gdelt_articles = [{
+        "source": "example.ir (via GDELT)", "title": "Coverage spike item",
+        "url": "https://example.ir/spike", "summary": "",
+        "published_at": "2026-08-22T00:00:00+00:00", "origin": "gdelt:iran",
+    }]
+    canned = GdeltResult(
+        articles=gdelt_articles,
+        snapshot="- iran: coverage at 3.0x its prior 12-day baseline over the last 48h (rising)",
+        errors={},
+    )
+    monkeypatch.setattr(pipeline.gdelt, "fetch_signals", lambda w, t: canned)
+    monkeypatch.setattr(pipeline.feeds, "fetch_all", lambda urls, t: (
+        [{
+            "source": "Wire", "title": "Synthetic headline",
+            "url": "https://example.com/x", "summary": "s",
+            "published_at": "2026-08-22T01:00:00+00:00",
+        }], {},
+    ))
+
+    captured: dict[str, Any] = {}
+
+    class RecordingOracle:
+        provider = "fake"
+        model = "fake-1"
+
+        def generate(self, articles, today, open_statements, track_record=None, signals=None):  # noqa: ANN001
+            captured["signals"] = signals
+            captured["titles"] = [a["title"] for a in articles]
+            return FakeOracle().generate(articles, today, open_statements)
+
+    scan_id = store.create_scan(settings.db_path, "fake", "fake-1")
+    pipeline.run_scan(settings, scan_id, oracle=RecordingOracle())
+
+    scan = store.get_scan(settings.db_path, scan_id)
+    assert scan["status"] == "complete", scan
+    assert "3.0x its prior 12-day baseline" in scan["signals"]  # audit trail
+    assert captured["signals"] == canned.snapshot  # the oracle read it
+    assert "Coverage spike item" in captured["titles"]  # GDELT article batched
+
+
+def test_gdelt_partial_failure_notes_but_still_batches_articles(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setenv("PYTHIA_DB", str(tmp_path / "gdelt2.db"))
+    monkeypatch.setenv("PYTHIA_GDELT", "1")
+    from pythia.config import get_settings
+    from pythia.gdelt import GdeltResult
+
+    settings = get_settings()
+    store.init_db(settings.db_path)
+    canned = GdeltResult(
+        articles=[{
+            "source": "x.ir (via GDELT)", "title": "Signalless article",
+            "url": "https://x.ir/a", "summary": "",
+            "published_at": "2026-08-22T00:00:00+00:00", "origin": "gdelt:iran",
+        }],
+        snapshot=None,  # timelines failed; articles survived
+        errors={"gulf": "timeline failed: ReadTimeout: slow"},
+    )
+    monkeypatch.setattr(pipeline.gdelt, "fetch_signals", lambda w, t: canned)
+    monkeypatch.setattr(pipeline.feeds, "fetch_all", lambda urls, t: (
+        [{
+            "source": "Wire", "title": "Synthetic headline",
+            "url": "https://example.com/x", "summary": "s",
+            "published_at": "2026-08-22T01:00:00+00:00",
+        }], {},
+    ))
+
+    captured: dict[str, Any] = {}
+
+    class RecordingOracle:
+        provider = "fake"
+        model = "fake-1"
+
+        def generate(self, articles, today, open_statements, track_record=None, signals=None):  # noqa: ANN001
+            captured["signals"] = signals
+            captured["titles"] = [a["title"] for a in articles]
+            return FakeOracle().generate(articles, today, open_statements)
+
+    scan_id = store.create_scan(settings.db_path, "fake", "fake-1")
+    pipeline.run_scan(settings, scan_id, oracle=RecordingOracle())
+    scan = store.get_scan(settings.db_path, scan_id)
+    assert scan["status"] == "complete"
+    assert scan["signals"] == ""  # no stale/false snapshot stored
+    assert "(1 GDELT watches failed)" in scan["detail"]
+    assert captured["signals"] is None
+    assert "Signalless article" in captured["titles"]
+
+
+def test_gdelt_disabled_skips_the_pull(
+    settings: Settings, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    def _boom(watches, timeout):  # noqa: ANN001
+        raise AssertionError("gdelt must not be called when disabled")
+
+    monkeypatch.setattr(pipeline.gdelt, "fetch_signals", _boom)
+    _seed_scan(settings, monkeypatch)  # settings fixture sets PYTHIA_GDELT=0
+    assert store.list_scans(settings.db_path)[0]["signals"] == ""
 
 
 def test_resolution_check_digest_includes_archive_supplement(

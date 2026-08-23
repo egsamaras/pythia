@@ -1,0 +1,12 @@
+# Pythia GDELT watch queries — one per line as:  name | query
+# Each watch tracks worldwide coverage volume (100+ languages) for its query;
+# the scan prompt receives the escalation ratio (last 48h vs 12-day baseline)
+# and the newest matching articles. Edit freely and restart the server.
+# Query syntax: space = AND, OR groups in parentheses, "quoted phrases".
+
+iran | iran (military OR nuclear OR sanctions)
+russia-ukraine | ukraine russia (offensive OR strike OR mobilization)
+china-taiwan | taiwan (military OR blockade OR drills)
+israel-levant | (israel OR lebanon OR gaza) (strike OR ceasefire OR escalation)
+gulf | ("saudi arabia" OR bahrain OR uae OR opec) (security OR sanctions OR attack)
+coups-emergencies | (coup OR "martial law" OR "state of emergency") -hurricane -storm -flood -wildfire -weather

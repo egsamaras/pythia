@@ -11,7 +11,7 @@ import re
 from datetime import date, timedelta
 from typing import Any
 
-from pythia import feeds, scoring, store
+from pythia import feeds, gdelt, scoring, store
 from pythia.config import Settings
 from pythia.oracle import Oracle, OracleError, get_oracle
 from pythia.oracle.base import MODES
@@ -43,6 +43,22 @@ def run_scan(
         inserted = store.upsert_articles(db, articles)
         logger.info("scan %d: %d articles fetched, %d new", scan_id, len(articles), inserted)
 
+        # Structured signals: GDELT coverage-volume ratios + worldwide articles.
+        signals_text: str | None = None
+        gdelt_note = ""
+        if settings.gdelt_enabled:
+            store.update_scan(db, scan_id, detail="Reading GDELT signals")
+            result = gdelt.fetch_signals(settings.gdelt_watches, settings.gdelt_timeout_s)
+            if result.articles:
+                store.upsert_articles(db, result.articles)
+            signals_text = result.snapshot
+            if result.errors and not result.snapshot and not result.articles:
+                gdelt_note = " (GDELT unavailable)"
+            elif result.errors:
+                gdelt_note = f" ({len(result.errors)} GDELT watches failed)"
+            if signals_text:
+                store.update_scan(db, scan_id, signals=signals_text)
+
         oracle = oracle or get_oracle(settings)
         cap = (
             settings.max_articles_anthropic
@@ -66,7 +82,11 @@ def run_scan(
             {m: scoring.lifetime_pairs(store.resolved_records(db, m)) for m in MODES},
         )
         drafts = oracle.generate(
-            batch, today, store.open_statements(db), track_record=track_record
+            batch,
+            today,
+            store.open_statements(db),
+            track_record=track_record,
+            signals=signals_text,
         )
         for draft in drafts:
             evidence_ids = [batch[i]["id"] for i in draft.evidence_indices if i < len(batch)]
@@ -86,6 +106,7 @@ def run_scan(
         detail = f"{len(drafts)} new forecasts from {len(batch)} articles"
         if feed_errors:
             detail += f" ({len(feed_errors)} feeds failed)"
+        detail += gdelt_note
         store.update_scan(db, scan_id, status="complete", detail=detail, finished=True)
         logger.info("scan %d complete: %s", scan_id, detail)
     except Exception as exc:  # noqa: BLE001 - boundary: report on the scan row

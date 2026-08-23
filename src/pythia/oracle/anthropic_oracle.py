@@ -103,10 +103,11 @@ class AnthropicOracle:
         today: date,
         open_statements: list[str],
         track_record: str | None = None,
+        signals: str | None = None,
     ) -> list[ForecastDraft]:
         raw = self._request_json(
             SYSTEM_PROMPT,
-            build_user_prompt(articles, today, open_statements, track_record),
+            build_user_prompt(articles, today, open_statements, track_record, signals),
             self._forecast_schema,
         )
         return validate_drafts(raw, len(articles), today)

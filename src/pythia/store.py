@@ -35,6 +35,7 @@ CREATE TABLE IF NOT EXISTS scans (
     status        TEXT NOT NULL DEFAULT 'running',
     detail        TEXT NOT NULL DEFAULT '',
     article_count INTEGER NOT NULL DEFAULT 0,
+    signals       TEXT NOT NULL DEFAULT '',
     error         TEXT
 );
 
@@ -130,6 +131,8 @@ def _ensure_prediction_columns(conn: sqlite3.Connection) -> None:
     scan_cols = {row["name"] for row in conn.execute("PRAGMA table_info(scans)")}
     if "kind" not in scan_cols:
         conn.execute("ALTER TABLE scans ADD COLUMN kind TEXT NOT NULL DEFAULT 'forecast'")
+    if "signals" not in scan_cols:
+        conn.execute("ALTER TABLE scans ADD COLUMN signals TEXT NOT NULL DEFAULT ''")
     article_cols = {row["name"] for row in conn.execute("PRAGMA table_info(articles)")}
     if "origin" not in article_cols:
         conn.execute("ALTER TABLE articles ADD COLUMN origin TEXT NOT NULL DEFAULT ''")
@@ -191,6 +194,10 @@ def upsert_articles(db_path: Path, articles: list[dict[str, Any]]) -> int:
                     fetched_at = excluded.fetched_at,
                     origin = excluded.origin
                 WHERE excluded.published_at > articles.published_at
+                  -- A GDELT re-sighting never downgrades a curated feed's row
+                  -- (its richer summary and provenance would be wiped).
+                  AND NOT (excluded.origin LIKE 'gdelt:%'
+                           AND articles.origin NOT LIKE 'gdelt:%')
                 """,
                 (
                     a["source"],
@@ -365,6 +372,7 @@ def update_scan(
     status: str | None = None,
     detail: str | None = None,
     article_count: int | None = None,
+    signals: str | None = None,
     error: str | None = None,
     finished: bool = False,
 ) -> None:
@@ -379,6 +387,9 @@ def update_scan(
     if article_count is not None:
         sets.append("article_count = ?")
         args.append(article_count)
+    if signals is not None:
+        sets.append("signals = ?")
+        args.append(signals)
     if error is not None:
         sets.append("error = ?")
         args.append(error)
@@ -397,7 +408,7 @@ def get_scan(db_path: Path, scan_id: int) -> dict[str, Any] | None:
         row = conn.execute(
             """
             SELECT id, started_at, finished_at, provider, model, kind, status,
-                   detail, article_count, error
+                   detail, article_count, signals, error
             FROM scans
             WHERE id = ?
             """,
@@ -411,7 +422,7 @@ def list_scans(db_path: Path, limit: int = 20) -> list[dict[str, Any]]:
         rows = conn.execute(
             """
             SELECT id, started_at, finished_at, provider, model, kind, status,
-                   detail, article_count, error
+                   detail, article_count, signals, error
             FROM scans
             ORDER BY id DESC
             LIMIT ?

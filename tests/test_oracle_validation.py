@@ -274,6 +274,16 @@ def test_forecast_prompt_includes_track_record_when_given() -> None:
     assert "calibration record" not in without
 
 
+def test_forecast_prompt_includes_structured_signals_when_given() -> None:
+    articles = [
+        {"source": "Wire", "title": "H", "summary": "", "published_at": "2026-08-20T00:00:00"}
+    ]
+    prompt = build_user_prompt(articles, TODAY, [], signals="- iran: 3.0x (rising)")
+    assert "Structured signals (machine-computed):" in prompt
+    assert "- iran: 3.0x (rising)" in prompt
+    assert "Structured signals" not in build_user_prompt(articles, TODAY, [])
+
+
 def test_prompt_contains_indexed_articles_and_open_statements() -> None:
     articles = [
         {"source": "Wire", "title": "Headline A", "summary": "S", "published_at": "2026-08-20T00:00:00"},

@@ -296,6 +296,10 @@ function renderScanStatus() {
       }));
     box.appendChild(btn);
     if (expanded) {
+      if (last.signals) {
+        box.appendChild(el("p", "digest-caption", "Structured signals the oracle read:"));
+        box.appendChild(el("pre", "digest-signals", last.signals));
+      }
       if (!state.digestArticles.length) {
         box.appendChild(el("p", "digest-caption",
           "No digest was recorded for this scan — it predates digest tracking. "

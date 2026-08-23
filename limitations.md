@@ -64,6 +64,14 @@ it produces.
   structured-output schema, app-side validation, no tool use, and the dashboard
   renders all text inertly — but steering of forecast *content* by feed text is
   inherent to the design.
+- **GDELT signals measure attention, not events.** The escalation ratios are
+  coverage-volume shifts in machine-coded news — a viral story can spike a
+  watch without any escalation on the ground, and saturation coverage of an
+  ongoing war can make further escalation read "steady" against an already
+  elevated baseline. The snapshot says this to the oracle explicitly, and the
+  ratios never resolve forecasts — they only inform them. GDELT also
+  rate-limits: a throttled pull is skipped, noted on the scan, and never
+  blocks forecasting.
 - **Timezones and horizons.** Horizon dates are calendar dates without timezone
   semantics; "by date X" resolution is user judgment.
 - **No retention policy.** Articles and predictions accumulate indefinitely in

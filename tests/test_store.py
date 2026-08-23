@@ -179,6 +179,9 @@ def test_scan_lifecycle(db: Path) -> None:
     scan = store.get_scan(db, scan_id)
     assert scan["status"] == "complete"
     assert scan["finished_at"] is not None
+    assert scan["signals"] == ""
+    store.update_scan(db, scan_id, signals="- iran: rising")
+    assert store.get_scan(db, scan_id)["signals"] == "- iran: rising"
 
 
 def _backdate_scan(db: Path, scan_id: int, iso: str) -> None:
@@ -365,6 +368,28 @@ def test_create_scan_exclusive_gate(db: Path) -> None:
     second = store.create_scan_exclusive(db, "ollama", "m", kind="resolution")
     assert second is not None
     assert store.get_scan(db, second)["kind"] == "resolution"
+
+
+def test_gdelt_resighting_never_downgrades_curated_rows(db: Path) -> None:
+    curated = {
+        "source": "Financial Times", "title": "Detailed report", "url": "https://x.example/story",
+        "summary": "A rich curated summary.", "published_at": _ts(hours_ago=10),
+        "origin": "https://www.ft.com/rss/home",
+    }
+    store.upsert_articles(db, [curated])
+    gdelt_sighting = {
+        "source": "ft.com (via GDELT)", "title": "Detailed report", "url": "https://x.example/story",
+        "summary": "", "published_at": _ts(hours_ago=1), "origin": "gdelt:gulf",
+    }
+    assert store.upsert_articles(db, [gdelt_sighting]) == 0  # guard holds
+    stored = store.recent_articles(db)[0]
+    assert stored["source"] == "Financial Times"
+    assert stored["summary"] == "A rich curated summary."
+    # The reverse direction is allowed: a curated feed upgrades a GDELT row.
+    first_gdelt = dict(gdelt_sighting, url="https://x.example/other", published_at=_ts(hours_ago=9))
+    store.upsert_articles(db, [first_gdelt])
+    upgrade = dict(curated, url="https://x.example/other", published_at=_ts(hours_ago=2))
+    assert store.upsert_articles(db, [upgrade]) == 1
 
 
 def test_scan_articles_digest_roundtrip(db: Path) -> None:
