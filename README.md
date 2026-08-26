@@ -41,7 +41,7 @@ Requires Python 3.12+ and either a local [Ollama](https://ollama.com) model
 (fully on-premise, nothing leaves your machine) or an Anthropic API key.
 
 ```bash
-git clone https://github.com/YOUR_USERNAME/pythia.git
+git clone https://github.com/egsamaras/pythia.git
 cd pythia
 python3 -m venv .venv
 .venv/bin/pip install -e ".[dev]"
