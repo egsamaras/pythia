@@ -112,6 +112,67 @@ def test_cli_run_reports_failure_exit_code(
     assert cli.main(["scan"]) == 1
 
 
+def _seed_messy_ledger(db_path) -> dict[str, int]:  # noqa: ANN001
+    scan_id = store.create_scan(db_path, "fake", "fake-1")
+    ids = {}
+    for name, stmt in [
+        ("good", "The EU will impose new sanctions on Iran by December 1, 2026."),
+        ("dup", "The EU imposes new sanctions on Iran by December 1, 2026."),
+        ("neg", "The EU will not impose new sanctions on Iran by December 1, 2026."),
+        ("baserate", "6 of 8 emergency OPEC meetings since 2008 ended in a quota cut."),
+        ("other", "Japan will raise its policy rate by December 1, 2026."),
+    ]:
+        ids[name] = store.insert_prediction(
+            db_path, scan_id=scan_id, statement=stmt, probability=0.5,
+            horizon_date="2026-12-01", category="geopolitics", rationale="",
+            evidence_ids=[],
+        )
+    return ids
+
+
+def test_cli_prune_dry_run_changes_nothing(
+    cli_env: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    from pythia.config import get_settings
+
+    settings = get_settings()
+    store.init_db(settings.db_path)
+    _seed_messy_ledger(settings.db_path)
+
+    assert cli.main(["prune", "--dry-run"]) == 0
+    out = capsys.readouterr().out
+    assert "3 of 5 open forecasts would be retired" in out
+    assert "Dry run" in out
+    assert len(store.list_predictions(settings.db_path, "open")) == 5
+
+
+def test_cli_prune_retires_only_the_bad_rows(cli_env: Path) -> None:
+    from pythia.config import get_settings
+
+    settings = get_settings()
+    store.init_db(settings.db_path)
+    ids = _seed_messy_ledger(settings.db_path)
+
+    assert cli.main(["prune"]) == 0
+    survivors = {p["id"] for p in store.list_predictions(settings.db_path, "open")}
+    assert survivors == {ids["good"], ids["other"]}
+
+
+def test_prune_never_touches_resolved_forecasts(cli_env: Path) -> None:
+    from pythia.config import get_settings
+
+    settings = get_settings()
+    store.init_db(settings.db_path)
+    ids = _seed_messy_ledger(settings.db_path)
+    # A duplicate that has already been scored is history: immutable.
+    store.resolve_prediction(settings.db_path, ids["dup"], True)
+
+    assert cli.main(["prune"]) == 0
+    resolved = store.list_predictions(settings.db_path, "resolved")
+    assert [p["id"] for p in resolved] == [ids["dup"]]
+    assert store.delete_open_predictions(settings.db_path, [ids["dup"]]) == 0
+
+
 def test_cli_schedule_writes_plist_without_activating(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
 ) -> None:

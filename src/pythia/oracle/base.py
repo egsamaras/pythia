@@ -12,6 +12,7 @@ from dataclasses import dataclass
 from datetime import date, timedelta
 from typing import Any, Protocol
 
+from pythia import dedup
 from pythia.config import CATEGORIES, REGIONS
 
 logger = logging.getLogger(__name__)
@@ -86,10 +87,11 @@ chain in "basis" (e.g. "attacks on shipping -> rerouting -> container rates \
 rise").
 - mode "precedent" — reference-class forecasting: identify the closest \
 historical analogues to the current situation and forecast what typically \
-follows. Put the reference class, the historical episodes with their \
-outcomes, and the resulting base rate in "basis" (e.g. "6 of 8 emergency \
-OPEC meetings since 2008 ended in a quota cut"). Only cite historical \
-episodes you are confident actually happened.
+follows. The STATEMENT is still a future event ("OPEC cuts quotas at its \
+September meeting"), never the base rate itself. Put the reference class, \
+the historical episodes with their outcomes, and the resulting base rate in \
+"basis" (e.g. "6 of 8 emergency OPEC meetings since 2008 ended in a quota \
+cut"). Only cite historical episodes you are confident actually happened.
 
 Mode tiebreak: if your primary evidence is a historical base rate from named \
 episodes, the mode is "precedent" even when the statement is a downstream \
@@ -97,8 +99,10 @@ outcome; use "consequence" only when you are reasoning from the specifics of \
 the current situation without a usable reference class.
 
 Rules for every forecast:
-- The statement must be a single, concrete, externally verifiable event with a \
-clear yes/no resolution by the horizon date (e.g. "The ECB cuts its deposit rate \
+- The statement must describe a FUTURE event — something that has not yet \
+happened and could still fail to happen. Never state a historical fact or a \
+base rate as the statement. It must be a single, concrete, externally \
+verifiable event with a clear yes/no resolution by the horizon date (e.g. "The ECB cuts its deposit rate \
 at its September meeting"), never a vague trend ("tensions will rise").
 - Statements must be resolvable from public reporting alone.
 - probability is your honest credence between 0.01 and 0.99. Always start \
@@ -451,6 +455,14 @@ def validate_drafts(raw: Any, n_articles: int, today: date) -> list[ForecastDraf
             continue
         if region not in REGIONS:
             logger.warning("dropping forecast %d: unknown region %r", i, region)
+            continue
+        if not dedup.is_future_claim(statement):
+            # A base rate ("6 of 8 past meetings ended in a cut") is not a
+            # forecast: it is unresolvable and belongs in `basis`.
+            logger.warning(
+                "dropping forecast %d: statement is not a future claim (%r)",
+                i, statement[:70],
+            )
             continue
         if mode != "event" and not basis:
             # basis is the audit trail for these modes; without it the mode

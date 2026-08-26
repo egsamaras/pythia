@@ -1,5 +1,16 @@
 # Pythia
 
+**A self-measuring forecasting system.** Pythia reads the world's news, states
+the odds of what happens next in concrete falsifiable terms — and is scored on
+every answer it ever gives.
+
+![Pythia dashboard](docs/dashboard.png)
+
+Most AI demos ask to be believed. This one keeps a ledger: every forecast has a
+deadline, every resolution is recorded, and the dashboard shows the Brier score
+and calibration curve that say whether any of it is any good. It runs entirely
+on one machine against a local open model, with the Claude API one key away.
+
 A news-driven probabilistic forecasting system. Pythia scans a configurable
 set of RSS feeds, asks a language model to turn the day's news into **concrete,
 falsifiable forecasts** (statement, probability, horizon date, category, evidence),
@@ -24,12 +35,34 @@ RSS feeds ──> feeds.py ──> SQLite (articles)
                         FastAPI ──> static dashboard (forecasts, resolution, calibration)
 ```
 
-## Setup
+## Quick start
+
+Requires Python 3.12+ and either a local [Ollama](https://ollama.com) model
+(fully on-premise, nothing leaves your machine) or an Anthropic API key.
 
 ```bash
+git clone https://github.com/YOUR_USERNAME/pythia.git
 cd pythia
 python3 -m venv .venv
 .venv/bin/pip install -e ".[dev]"
+```
+
+Then start it — with a local model:
+
+```bash
+PYTHIA_PROVIDER=ollama PYTHIA_OLLAMA_MODEL=mistral-small:22b \
+  .venv/bin/python -m uvicorn --app-dir src pythia.server:app --host 127.0.0.1 --port 8792
+```
+
+…or with the Claude API (`export ANTHROPIC_API_KEY=…` first, then omit the
+provider variables). Open **http://127.0.0.1:8792** and press **Run scan**.
+A local 22B model takes 10–20 minutes per scan on a laptop; Claude takes
+under a minute.
+
+Verify the install without any model or network access:
+
+```bash
+.venv/bin/python -m pytest
 ```
 
 ## Run
@@ -37,8 +70,6 @@ python3 -m venv .venv
 ```bash
 .venv/bin/python -m uvicorn --app-dir src pythia.server:app --host 127.0.0.1 --port 8792
 ```
-
-Open http://127.0.0.1:8792 and press **Run scan**.
 
 The server binds to localhost and has **no authentication** — do not expose it.
 
@@ -161,9 +192,10 @@ in the project root > a built-in minimal list.
 ## Headless runs & scheduling
 
 ```bash
-.venv/bin/python -m pythia.cli scan     # one forecast scan
-.venv/bin/python -m pythia.cli check    # one resolution check
-.venv/bin/python -m pythia.cli daily    # check, then scan (the morning routine)
+.venv/bin/python -m pythia.cli scan          # one forecast scan
+.venv/bin/python -m pythia.cli check         # one resolution check
+.venv/bin/python -m pythia.cli daily         # check, then scan (the morning routine)
+.venv/bin/python -m pythia.cli prune --dry-run   # list unusable open forecasts
 .venv/bin/python -m pythia.cli schedule --hour 7 --minute 30
 ```
 
@@ -173,6 +205,26 @@ prints the `launchctl load -w …` command but never activates anything itself.
 Current `PYTHIA_*` variables are captured into the agent; secrets are not.
 CLI and server share the database safely: each refuses to start a run while
 the other has one in flight.
+
+## Statement hygiene
+
+The prompt tells the model to state each claim once, in the positive, as a
+future event. Mid-size local models comply unevenly, so the rules are
+**enforced in code** rather than merely requested:
+
+- a statement reciting history (`"6 of 8 past meetings ended in a cut"`) is
+  refused — that belongs in the forecast's `basis`, and as a statement it
+  could never be resolved;
+- a restatement of an open claim is refused, including a reconjugated one
+  (`"The EU imposes…"` vs `"The EU will impose…"`);
+- **a claim and its negation can never both be open.** Scoring X and NOT-X
+  together guarantees one hit and one miss whatever the model's skill,
+  manufacturing a ~0.25 Brier score out of nothing — which would quietly
+  destroy the only thing this system claims to offer.
+
+Forecasts stored before those gates existed can be retired with
+`pythia.cli prune` (`--dry-run` lists them first). Resolved forecasts are
+never touched: the ledger's history is append-only.
 
 ## Database location
 

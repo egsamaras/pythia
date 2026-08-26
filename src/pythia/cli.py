@@ -13,7 +13,7 @@ import plistlib
 import sys
 from pathlib import Path
 
-from pythia import pipeline, store
+from pythia import dedup, pipeline, store
 from pythia.config import (
     LEGACY_DB_PATH,
     PROJECT_ROOT,
@@ -89,6 +89,51 @@ def cmd_daily(args: argparse.Namespace) -> int:
     return max(check_rc, scan_rc)
 
 
+def cmd_prune(args: argparse.Namespace) -> int:
+    """Retire open forecasts that today's validation would refuse.
+
+    Statement hygiene (no base rates, no duplicates, no negation pairs) became
+    an enforced gate after some forecasts were already stored. Those rows
+    would corrupt the first real calibration numbers, so this retires them.
+    Resolved forecasts are never touched — the ledger's history is immutable.
+    """
+    settings = get_settings()
+    _prepare(settings)
+    open_preds = [
+        p for p in store.list_predictions(settings.db_path, "open")
+    ]
+    open_preds.sort(key=lambda p: p["id"])  # keep the earliest of a colliding set
+
+    kept: list[str] = []
+    doomed: list[tuple[dict, str, str]] = []
+    for p in open_preds:
+        if not dedup.is_future_claim(p["statement"]):
+            doomed.append((p, "not-a-forecast", ""))
+            continue
+        collision = dedup.duplicate_of(p["statement"], kept)
+        if collision:
+            doomed.append((p, collision[0], collision[1]))
+            continue
+        kept.append(p["statement"])
+
+    if not doomed:
+        print(f"Nothing to prune: all {len(open_preds)} open forecasts are clean.")
+        return 0
+
+    for p, kind, other in doomed:
+        print(f"[{kind:14}] #{p['id']} {p['statement'][:66]}")
+        if other:
+            print(f"{'':17} collides with: {other[:62]}")
+    print(f"\n{len(doomed)} of {len(open_preds)} open forecasts would be retired.")
+
+    if args.dry_run:
+        print("Dry run — nothing changed. Re-run without --dry-run to apply.")
+        return 0
+    removed = store.delete_open_predictions(settings.db_path, [p["id"] for p, _, _ in doomed])
+    print(f"Retired {removed} forecasts; {len(kept)} remain open.")
+    return 0
+
+
 def cmd_schedule(args: argparse.Namespace) -> int:
     """Write a launchd agent plist for a daily run. Activation stays manual."""
     log_path = Path.home() / "Library" / "Logs" / "pythia.log"
@@ -138,6 +183,11 @@ def main(argv: list[str] | None = None) -> int:
     sub.add_parser("daily", help="resolution check, then forecast scan").set_defaults(
         func=cmd_daily
     )
+    prune = sub.add_parser(
+        "prune", help="retire open forecasts today's validation would refuse"
+    )
+    prune.add_argument("--dry-run", action="store_true", help="list them, change nothing")
+    prune.set_defaults(func=cmd_prune)
     schedule = sub.add_parser("schedule", help="write a launchd agent for a daily run")
     schedule.add_argument("--hour", type=int, default=7, choices=range(24))
     schedule.add_argument("--minute", type=int, default=30, choices=range(60))

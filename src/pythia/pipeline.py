@@ -11,7 +11,7 @@ import re
 from datetime import date, timedelta
 from typing import Any
 
-from pythia import feeds, gdelt, scoring, store
+from pythia import dedup, feeds, gdelt, scoring, store
 from pythia.config import Settings
 from pythia.oracle import Oracle, OracleError, get_oracle
 from pythia.oracle.base import MODES
@@ -88,7 +88,23 @@ def run_scan(
             track_record=track_record,
             signals=signals_text,
         )
+        # Enforcement, not instruction: the prompt forbids duplicates and
+        # negation pairs, but models oblige unevenly. A ledger holding both X
+        # and NOT-X scores itself into meaninglessness, so collisions are
+        # refused here against every open claim and within the batch itself.
+        seen = store.open_statements(db, limit=1000)
+        refused = 0
         for draft in drafts:
+            collision = dedup.duplicate_of(draft.statement, seen)
+            if collision:
+                kind, other = collision
+                logger.info(
+                    "refusing %s forecast: %r collides with %r", kind,
+                    draft.statement[:60], other[:60],
+                )
+                refused += 1
+                continue
+            seen.append(draft.statement)
             evidence_ids = [batch[i]["id"] for i in draft.evidence_indices if i < len(batch)]
             store.insert_prediction(
                 db,
@@ -103,7 +119,10 @@ def run_scan(
                 basis=draft.basis,
                 region=draft.region,
             )
-        detail = f"{len(drafts)} new forecasts from {len(batch)} articles"
+        kept = len(drafts) - refused
+        detail = f"{kept} new forecasts from {len(batch)} articles"
+        if refused:
+            detail += f" ({refused} duplicates refused)"
         if feed_errors:
             detail += f" ({len(feed_errors)} feeds failed)"
         detail += gdelt_note

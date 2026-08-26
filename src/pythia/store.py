@@ -538,12 +538,46 @@ def list_predictions(db_path: Path, status: str | None = None) -> list[dict[str,
     return out
 
 
-def open_statements(db_path: Path) -> list[str]:
+def open_statements(db_path: Path, limit: int = 40) -> list[str]:
+    """Statements of open forecasts, newest first.
+
+    The default cap suits the prompt (avoid duplicate suggestions); pass a
+    larger limit for duplicate ENFORCEMENT, which must see every open claim.
+    """
     with connect(db_path) as conn:
         rows = conn.execute(
-            "SELECT statement FROM predictions WHERE status = 'open' ORDER BY id DESC LIMIT 40"
+            "SELECT statement FROM predictions WHERE status = 'open' "
+            "ORDER BY id DESC LIMIT ?",
+            (limit,),
         ).fetchall()
     return [r["statement"] for r in rows]
+
+
+def delete_open_predictions(db_path: Path, pred_ids: list[int]) -> int:
+    """Delete OPEN predictions by id, with their revision history.
+
+    Resolved forecasts are immune: the resolution ledger is append-only, so a
+    scored forecast can never be quietly removed from the record.
+    """
+    if not pred_ids:
+        return 0
+    placeholders = ",".join("?" for _ in pred_ids)
+    with connect(db_path) as conn:
+        conn.execute(
+            f"""
+            DELETE FROM probability_revisions
+            WHERE prediction_id IN (
+                SELECT id FROM predictions
+                WHERE id IN ({placeholders}) AND status = 'open'
+            )
+            """,
+            pred_ids,
+        )
+        cur = conn.execute(
+            f"DELETE FROM predictions WHERE id IN ({placeholders}) AND status = 'open'",
+            pred_ids,
+        )
+    return cur.rowcount
 
 
 def resolve_prediction(

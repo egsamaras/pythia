@@ -79,6 +79,28 @@ def test_non_object_raises() -> None:
         validate_drafts(["not", "a", "dict"], n_articles=3, today=TODAY)
 
 
+def test_base_rate_statement_is_dropped() -> None:
+    # The model's favourite failure: putting the basis in the statement field.
+    raw = {
+        "forecasts": [
+            _forecast(
+                statement="6 of 8 emergency OPEC meetings since 2008 ended in a quota cut.",
+                mode="precedent",
+                basis="Reference class: 8 emergency OPEC meetings since 2008.",
+            ),
+            _forecast(),
+        ]
+    }
+    drafts = validate_drafts(raw, n_articles=3, today=TODAY)
+    assert len(drafts) == 1
+    assert drafts[0].statement.startswith("The ECB")
+
+
+def test_precedent_prompt_demands_a_future_statement() -> None:
+    assert "The STATEMENT is still a future event" in SYSTEM_PROMPT
+    assert "Never state a historical fact or a base rate as the statement" in SYSTEM_PROMPT
+
+
 def test_region_captured_defaulted_and_validated() -> None:
     tagged = _forecast(region="mena")
     untagged = _forecast()

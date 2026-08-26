@@ -465,6 +465,86 @@ def test_gdelt_partial_failure_notes_but_still_batches_articles(
     assert "Signalless article" in captured["titles"]
 
 
+class DuplicatingOracle:
+    """A model that ignores the prompt's no-duplicates rule, as they do."""
+
+    provider = "fake"
+    model = "fake-1"
+
+    def generate(self, articles, today, open_statements, track_record=None, signals=None):  # noqa: ANN001
+        from datetime import timedelta as _td
+
+        horizon = (date.today() + _td(days=30)).isoformat()
+
+        def draft(stmt: str) -> ForecastDraft:
+            return ForecastDraft(
+                statement=stmt, probability=0.5, horizon_date=horizon,
+                category="geopolitics", rationale="r", evidence_indices=[],
+            )
+
+        return [
+            draft("The EU will impose new sanctions on Iran by December 1, 2026."),
+            # same claim restated
+            draft("The EU imposes new sanctions on Iran by December 1, 2026."),
+            # the same claim asserted the other way
+            draft("The EU will not impose new sanctions on Iran by December 1, 2026."),
+            # genuinely different
+            draft("Japan will raise its policy rate by December 1, 2026."),
+        ]
+
+
+def test_duplicate_and_negation_forecasts_are_refused(
+    settings: Settings, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr(pipeline.feeds, "fetch_all", lambda urls, t: (
+        [{
+            "source": "Wire", "title": "Synthetic headline",
+            "url": "https://example.com/x", "summary": "s",
+            "published_at": "2026-08-22T01:00:00+00:00",
+        }], {},
+    ))
+    scan_id = store.create_scan(settings.db_path, "fake", "fake-1")
+    pipeline.run_scan(settings, scan_id, oracle=DuplicatingOracle())
+
+    scan = store.get_scan(settings.db_path, scan_id)
+    assert scan["status"] == "complete", scan
+    assert "2 new forecasts" in scan["detail"]
+    assert "(2 duplicates refused)" in scan["detail"]
+    statements = [p["statement"] for p in store.list_predictions(settings.db_path)]
+    assert len(statements) == 2
+    assert any("Japan" in s for s in statements)
+    # Never both a claim and its negation.
+    assert not (
+        any("will impose new sanctions on Iran" in s for s in statements)
+        and any("will not impose new sanctions on Iran" in s for s in statements)
+    )
+
+
+def test_duplicates_refused_against_previously_open_forecasts(
+    settings: Settings, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    seed = store.create_scan(settings.db_path, "fake", "fake-1")
+    store.insert_prediction(
+        settings.db_path, scan_id=seed,
+        statement="Japan will raise its policy rate by December 1, 2026.",
+        probability=0.4, horizon_date=(date.today() + timedelta(days=30)).isoformat(),
+        category="economy", rationale="", evidence_ids=[],
+    )
+    monkeypatch.setattr(pipeline.feeds, "fetch_all", lambda urls, t: (
+        [{
+            "source": "Wire", "title": "Synthetic headline",
+            "url": "https://example.com/x", "summary": "s",
+            "published_at": "2026-08-22T01:00:00+00:00",
+        }], {},
+    ))
+    scan_id = store.create_scan(settings.db_path, "fake", "fake-1")
+    pipeline.run_scan(settings, scan_id, oracle=DuplicatingOracle())
+    statements = [p["statement"] for p in store.list_predictions(settings.db_path)]
+    # The Japan forecast was already open, so this scan adds only the EU one.
+    assert sum("Japan" in s for s in statements) == 1
+    assert "(3 duplicates refused)" in store.get_scan(settings.db_path, scan_id)["detail"]
+
+
 def test_gdelt_disabled_skips_the_pull(
     settings: Settings, monkeypatch: pytest.MonkeyPatch
 ) -> None:
