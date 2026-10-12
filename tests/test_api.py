@@ -1,7 +1,7 @@
 """API tests with a fake oracle and no network."""
 
 import time
-from datetime import date, timedelta
+from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any
 
@@ -11,6 +11,18 @@ from fastapi.testclient import TestClient
 from pythia import pipeline, store
 from pythia.config import Settings
 from pythia.oracle.base import ForecastDraft, OracleError
+
+def _recent(hours_ago: float = 2) -> str:
+    """An article timestamp inside the batcher's freshness window.
+
+    Hardcoded dates rot: recent_articles_balanced ignores anything older than
+    two weeks, so fixtures pinned to a literal date silently stop being
+    batched once that date ages out.
+    """
+    return (
+        datetime.now(timezone.utc) - timedelta(hours=hours_ago)
+    ).isoformat(timespec="seconds")
+
 
 
 class FakeOracle:
@@ -86,7 +98,7 @@ def _seed_scan(settings: Settings, monkeypatch: pytest.MonkeyPatch) -> None:
             "title": "Synthetic headline",
             "url": "https://example.com/x",
             "summary": "s",
-            "published_at": "2026-08-20T00:00:00+00:00",
+            "published_at": _recent(),
         }
     ]
     monkeypatch.setattr(pipeline.feeds, "fetch_all", lambda urls, t: (articles, {}))
@@ -171,6 +183,79 @@ def test_resolve_flow_updates_stats(
     resp = client.post(f"/api/predictions/{event_id}/reopen")
     assert resp.status_code == 200
     assert client.get("/api/stats").json()["open"] == 3
+
+
+def test_void_retires_without_scoring(
+    client: TestClient, settings: Settings, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _seed_scan(settings, monkeypatch)
+    preds = client.get("/api/predictions").json()
+    target = next(p for p in preds if p["mode"] == "event")
+
+    resp = client.post(
+        f"/api/predictions/{target['id']}/void",
+        json={"reason": '"a major European city" cannot be resolved'},
+    )
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body["status"] == "void"
+    assert body["outcome"] is None
+    assert body["resolution_note"] == '"a major European city" cannot be resolved'
+
+    stats = client.get("/api/stats").json()
+    assert stats["void"] == 1
+    assert stats["open"] == 2
+    # The whole point: a void never reaches the score.
+    assert stats["resolved"] == 0
+    assert stats["brier"] is None
+    assert stats["by_mode"]["event"]["resolved"] == 0
+
+    assert [p["id"] for p in client.get("/api/predictions?status=void").json()] == [
+        target["id"]
+    ]
+    # Voiding is not resolving: it must not be scoreable afterwards either.
+    assert client.post(
+        f"/api/predictions/{target['id']}/resolve", json={"outcome": True}
+    ).status_code == 404
+    # But it can be reopened if the statement is salvageable.
+    assert client.post(f"/api/predictions/{target['id']}/reopen").status_code == 200
+    assert client.get("/api/stats").json()["open"] == 3
+
+
+def test_void_requires_a_reason_and_an_open_forecast(
+    client: TestClient, settings: Settings, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _seed_scan(settings, monkeypatch)
+    pid = client.get("/api/predictions").json()[0]["id"]
+    assert client.post(f"/api/predictions/{pid}/void", json={"reason": ""}).status_code == 422
+    assert client.post("/api/predictions/99999/void", json={"reason": "x"}).status_code == 404
+    client.post(f"/api/predictions/{pid}/resolve", json={"outcome": True})
+    # A scored forecast is history; it cannot be quietly voided out of the record.
+    assert client.post(
+        f"/api/predictions/{pid}/void", json={"reason": "second thoughts"}
+    ).status_code == 404
+
+
+def test_voided_statement_is_not_proposed_again(
+    settings: Settings, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _seed_scan(settings, monkeypatch)
+    preds = store.list_predictions(settings.db_path, "open")
+    target = next(p for p in preds if p["mode"] == "event")
+    store.void_prediction(settings.db_path, target["id"], "too vague")
+
+    monkeypatch.setattr(pipeline.feeds, "fetch_all", lambda urls, t: (
+        [{"source": "Wire", "title": "Synthetic headline",
+          "url": "https://example.com/x", "summary": "s",
+          "published_at": _recent()}], {},
+    ))
+    scan_id = store.create_scan(settings.db_path, "fake", "fake-1")
+    pipeline.run_scan(settings, scan_id, oracle=FakeOracle())
+    # FakeOracle re-offers all three statements: two collide with still-open
+    # forecasts, and the third with the voided one.
+    assert "(3 duplicates refused)" in store.get_scan(settings.db_path, scan_id)["detail"]
+    statements = [p["statement"] for p in store.list_predictions(settings.db_path, "open")]
+    assert target["statement"] not in statements
 
 
 def test_resolve_missing_prediction_404(client: TestClient) -> None:
@@ -353,7 +438,7 @@ def test_track_record_reaches_the_forecast_prompt(
     articles = [{
         "source": "Wire", "title": "Synthetic headline",
         "url": "https://example.com/tr", "summary": "s",
-        "published_at": "2026-08-20T00:00:00+00:00",
+        "published_at": _recent(),
     }]
     monkeypatch.setattr(pipeline.feeds, "fetch_all", lambda urls, t: (articles, {}))
     scan_id = store.create_scan(settings.db_path, "fake", "fake-1")
@@ -379,7 +464,7 @@ def test_gdelt_signals_flow_into_prompt_scan_row_and_archive(
     gdelt_articles = [{
         "source": "example.ir (via GDELT)", "title": "Coverage spike item",
         "url": "https://example.ir/spike", "summary": "",
-        "published_at": "2026-08-22T00:00:00+00:00", "origin": "gdelt:iran",
+        "published_at": _recent(), "origin": "gdelt:iran",
     }]
     canned = GdeltResult(
         articles=gdelt_articles,
@@ -391,7 +476,7 @@ def test_gdelt_signals_flow_into_prompt_scan_row_and_archive(
         [{
             "source": "Wire", "title": "Synthetic headline",
             "url": "https://example.com/x", "summary": "s",
-            "published_at": "2026-08-22T01:00:00+00:00",
+            "published_at": _recent(),
         }], {},
     ))
 
@@ -430,7 +515,7 @@ def test_gdelt_partial_failure_notes_but_still_batches_articles(
         articles=[{
             "source": "x.ir (via GDELT)", "title": "Signalless article",
             "url": "https://x.ir/a", "summary": "",
-            "published_at": "2026-08-22T00:00:00+00:00", "origin": "gdelt:iran",
+            "published_at": _recent(), "origin": "gdelt:iran",
         }],
         snapshot=None,  # timelines failed; articles survived
         errors={"gulf": "timeline failed: ReadTimeout: slow"},
@@ -440,7 +525,7 @@ def test_gdelt_partial_failure_notes_but_still_batches_articles(
         [{
             "source": "Wire", "title": "Synthetic headline",
             "url": "https://example.com/x", "summary": "s",
-            "published_at": "2026-08-22T01:00:00+00:00",
+            "published_at": _recent(),
         }], {},
     ))
 
@@ -500,7 +585,7 @@ def test_duplicate_and_negation_forecasts_are_refused(
         [{
             "source": "Wire", "title": "Synthetic headline",
             "url": "https://example.com/x", "summary": "s",
-            "published_at": "2026-08-22T01:00:00+00:00",
+            "published_at": _recent(),
         }], {},
     ))
     scan_id = store.create_scan(settings.db_path, "fake", "fake-1")
@@ -534,7 +619,7 @@ def test_duplicates_refused_against_previously_open_forecasts(
         [{
             "source": "Wire", "title": "Synthetic headline",
             "url": "https://example.com/x", "summary": "s",
-            "published_at": "2026-08-22T01:00:00+00:00",
+            "published_at": _recent(),
         }], {},
     ))
     scan_id = store.create_scan(settings.db_path, "fake", "fake-1")
@@ -675,7 +760,7 @@ def test_update_skipped_after_horizon(
         [{
             "source": "Wire", "title": "Synthetic headline",
             "url": "https://example.com/x", "summary": "s",
-            "published_at": "2026-08-20T00:00:00+00:00",
+            "published_at": _recent(),
         }],
     )
     store.insert_prediction(
@@ -877,6 +962,7 @@ def test_stats_empty_db(client: TestClient) -> None:
         "open": 0,
         "due": 0,
         "resolved": 0,
+        "void": 0,
         "brier": None,
         "hit_rate": None,
         "calibration": [],

@@ -92,7 +92,7 @@ def run_scan(
         # negation pairs, but models oblige unevenly. A ledger holding both X
         # and NOT-X scores itself into meaninglessness, so collisions are
         # refused here against every open claim and within the batch itself.
-        seen = store.open_statements(db, limit=1000)
+        seen = store.open_statements(db, limit=1000, include_void=True)
         refused = 0
         for draft in drafts:
             collision = dedup.duplicate_of(draft.statement, seen)

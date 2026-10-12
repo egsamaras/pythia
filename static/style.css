@@ -325,3 +325,17 @@ footer {
   border-top: 1px solid var(--grid);
 }
 footer p { max-width: 70ch; }
+
+/* --- void: retired without a score --- */
+.badge-void { color: var(--muted); font-weight: 600; }
+.fc-void-note { margin: 10px 0 0; color: var(--muted); font-size: 12.5px; overflow-wrap: anywhere; }
+.fc-void-note strong { color: var(--ink-2); font-weight: 600; }
+.void-form { display: flex; gap: 8px; margin-top: 10px; width: 100%; flex-wrap: wrap; }
+.void-form input {
+  flex: 1; min-width: 220px;
+  font: 13px var(--font); color: var(--ink);
+  background: var(--page); border: 1px solid var(--border);
+  border-radius: 6px; padding: 7px 10px;
+}
+.void-form input:focus { outline: 2px solid var(--seq-400); outline-offset: 1px; }
+.forecast-card.is-void { opacity: 0.72; }

@@ -146,6 +146,15 @@ oracle read is always auditable. The snapshot itself carries the caveat:
 coverage volume measures the world's *attention*, not verified events.
 Disable with `PYTHIA_GDELT=0`; a failed pull never blocks a scan.
 
+**Known limitation.** GDELT's free DOC API allows one request every five
+seconds per IP, and a burst trips a cooldown longer than that. On a shared or
+carrier-NAT'd connection the quota is consumed by other users on the same
+public address, and every pull returns HTTP 429 regardless of how politely
+this client behaves — observed on the author's own network, where scheduled
+runs report "GDELT unavailable" from the first request. The scan degrades
+cleanly and says so. If you need the signals reliably, GDELT's bulk 15-minute
+export files carry no rate limit and would suit a different adapter.
+
 Feeds are fetched concurrently and capped at 25 entries each per fetch. The
 analysis batch pools the newest few articles **per feed** (so a
 weekly-publishing analysis shop is never drowned out by the wires) and
@@ -205,6 +214,24 @@ prints the `launchctl load -w …` command but never activates anything itself.
 Current `PYTHIA_*` variables are captured into the agent; secrets are not.
 CLI and server share the database safely: each refuses to start a run while
 the other has one in flight.
+
+## Voiding an unscoreable forecast
+
+Not every statement a model produces can be settled. *"The campaign will lead
+to a cyberattack on a major European city"* has no clean yes or no, and
+forcing one would put a coin-flip into the calibration record.
+
+**Void** retires such a forecast without scoring it, recording why. Voided
+forecasts are excluded from every scoring query, so they never touch the Brier
+score or the calibration curve, but they stay visible under the Void filter —
+the ledger keeps an honest trace that the system produced something
+unscoreable rather than hiding it. A voided statement is also blocked from
+being proposed again, since re-offering a claim you have already judged
+unscoreable is just noise. Reopening a void returns it to the ledger and
+clears both.
+
+Scoring a void directly is refused: it has to be reopened first, so the intent
+is on the record.
 
 ## Statement hygiene
 

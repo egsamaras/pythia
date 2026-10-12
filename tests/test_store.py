@@ -521,6 +521,35 @@ def test_prediction_resolve_and_reopen_cycle(db: Path) -> None:
     assert store.resolved_pairs(db) == []
 
 
+def test_void_is_excluded_from_every_scoring_query(db: Path) -> None:
+    scored = _open_prediction(db, "Scoreable claim")
+    vague = _open_prediction(db, "Something vague happens")
+    store.resolve_prediction(db, scored, True)
+    assert store.void_prediction(db, vague, "unresolvable as written") is not None
+
+    # The scoring surfaces must see the resolved one and only the resolved one.
+    assert store.resolved_pairs(db) == [(0.5, 1)]
+    assert [r["id"] for r in store.resolved_records(db)] == [scored]
+    assert [p["id"] for p in store.list_predictions(db, "void")] == [vague]
+
+    voided = store.get_prediction(db, vague)
+    assert voided["outcome"] is None and voided["resolved_at"] is not None
+    # Void is reachable only from open, and never from resolved.
+    assert store.void_prediction(db, vague, "again") is None
+    assert store.void_prediction(db, scored, "cannot") is None
+
+
+def test_void_blocks_reproposal_until_reopened(db: Path) -> None:
+    pid = _open_prediction(db, "Something vague happens by December")
+    store.void_prediction(db, pid, "too vague")
+    assert store.open_statements(db) == []
+    assert store.open_statements(db, include_void=True) == [
+        "Something vague happens by December"
+    ]
+    store.reopen_prediction(db, pid)
+    assert store.open_statements(db) == ["Something vague happens by December"]
+
+
 def test_resolve_missing_prediction_returns_none(db: Path) -> None:
     assert store.resolve_prediction(db, 999, True) is None
     assert store.reopen_prediction(db, 999) is None

@@ -68,6 +68,10 @@ class ResolveRequest(BaseModel):
     note: str = Field(default="", max_length=2000)
 
 
+class VoidRequest(BaseModel):
+    reason: str = Field(min_length=1, max_length=2000)
+
+
 @app.get("/api/health")
 def health() -> dict[str, Any]:
     settings = get_settings()
@@ -166,7 +170,7 @@ def scan_digest(scan_id: int) -> list[dict[str, Any]]:
 
 @app.get("/api/predictions")
 def predictions(
-    status: str | None = Query(default=None, pattern="^(open|resolved)$"),
+    status: str | None = Query(default=None, pattern="^(open|resolved|void)$"),
 ) -> list[dict[str, Any]]:
     settings = get_settings()
     preds = store.list_predictions(settings.db_path, status)
@@ -219,6 +223,15 @@ def reject_proposal(pred_id: int) -> dict[str, Any]:
     return {"ok": True}
 
 
+@app.post("/api/predictions/{pred_id}/void")
+def void(pred_id: int, body: VoidRequest) -> dict[str, Any]:
+    """Retire an open forecast as unscoreable, with the reason recorded."""
+    updated = store.void_prediction(get_settings().db_path, pred_id, body.reason)
+    if updated is None:
+        raise HTTPException(status_code=404, detail="open prediction not found")
+    return updated
+
+
 @app.post("/api/predictions/{pred_id}/reopen")
 def reopen(pred_id: int) -> dict[str, Any]:
     updated = store.reopen_prediction(get_settings().db_path, pred_id)
@@ -241,6 +254,7 @@ def stats() -> dict[str, Any]:
     preds = store.list_predictions(settings.db_path)
     today = date.today().isoformat()
     open_preds = [p for p in preds if p["status"] == "open"]
+    voided = sum(1 for p in preds if p["status"] == "void")
     by_mode = {}
     for mode in MODES:
         mode_pairs = scoring.lifetime_pairs(
@@ -255,6 +269,7 @@ def stats() -> dict[str, Any]:
         "open": len(open_preds),
         "due": sum(1 for p in open_preds if p["horizon_date"] < today),
         "resolved": len(pairs),
+        "void": voided,
         "brier": scoring.brier_score(pairs),
         "hit_rate": scoring.hit_rate(pairs),
         "calibration": scoring.calibration_bins(pairs),

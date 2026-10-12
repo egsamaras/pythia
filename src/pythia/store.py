@@ -522,7 +522,7 @@ def list_predictions(db_path: Path, status: str | None = None) -> list[dict[str,
         FROM predictions
     """
     args: list[Any] = []
-    if status in ("open", "resolved"):
+    if status in ("open", "resolved", "void"):
         query += " WHERE status = ?"
         args.append(status)
     query += " ORDER BY id DESC"
@@ -538,17 +538,24 @@ def list_predictions(db_path: Path, status: str | None = None) -> list[dict[str,
     return out
 
 
-def open_statements(db_path: Path, limit: int = 40) -> list[str]:
+def open_statements(
+    db_path: Path, limit: int = 40, include_void: bool = False
+) -> list[str]:
     """Statements of open forecasts, newest first.
 
     The default cap suits the prompt (avoid duplicate suggestions); pass a
     larger limit for duplicate ENFORCEMENT, which must see every open claim.
+    ``include_void`` also returns voided statements: voiding one says "this
+    cannot be scored", so re-proposing it tomorrow would simply hand the user
+    the same unscoreable claim again. Reopening a void clears that block.
     """
+    statuses = ("open", "void") if include_void else ("open",)
+    placeholders = ",".join("?" for _ in statuses)
     with connect(db_path) as conn:
         rows = conn.execute(
-            "SELECT statement FROM predictions WHERE status = 'open' "
+            f"SELECT statement FROM predictions WHERE status IN ({placeholders}) "
             "ORDER BY id DESC LIMIT ?",
-            (limit,),
+            (*statuses, limit),
         ).fetchall()
     return [r["statement"] for r in rows]
 
@@ -580,9 +587,42 @@ def delete_open_predictions(db_path: Path, pred_ids: list[int]) -> int:
     return cur.rowcount
 
 
+def void_prediction(db_path: Path, pred_id: int, reason: str) -> dict[str, Any] | None:
+    """Retire an open forecast without scoring it.
+
+    For statements too vague to settle honestly ("a major European city",
+    "increased diplomatic pressure"). Guessing an outcome would put noise
+    into the calibration record; deleting it would hide that the system
+    produced something unscoreable. A void keeps the forecast and its
+    reason in the ledger, and every scoring query ignores it because they
+    all select status = 'resolved'.
+    """
+    with connect(db_path) as conn:
+        cur = conn.execute(
+            """
+            UPDATE predictions
+            SET status = 'void', outcome = NULL, resolved_at = ?,
+                resolution_note = ?, resolution_evidence_ids = '[]',
+                proposal_outcome = NULL, proposal_note = NULL,
+                proposal_evidence_ids = '[]', proposal_at = NULL
+            WHERE id = ? AND status = 'open'
+            """,
+            (_now_iso(), reason, pred_id),
+        )
+        if cur.rowcount == 0:
+            return None
+    return get_prediction(db_path, pred_id)
+
+
 def resolve_prediction(
     db_path: Path, pred_id: int, outcome: bool, note: str = ""
 ) -> dict[str, Any] | None:
+    """Score an outcome against a forecast.
+
+    Re-resolving a resolved forecast is allowed (correcting a mis-click), but
+    a VOID one is refused: it was retired as unscoreable, and scoring it has
+    to go through an explicit reopen so the intent is on the record.
+    """
     with connect(db_path) as conn:
         cur = conn.execute(
             """
@@ -590,7 +630,7 @@ def resolve_prediction(
             SET status = 'resolved', outcome = ?, resolved_at = ?, resolution_note = ?,
                 proposal_outcome = NULL, proposal_note = NULL,
                 proposal_evidence_ids = '[]', proposal_at = NULL
-            WHERE id = ?
+            WHERE id = ? AND status != 'void'
             """,
             (1 if outcome else 0, _now_iso(), note, pred_id),
         )
@@ -601,6 +641,7 @@ def resolve_prediction(
 
 
 def reopen_prediction(db_path: Path, pred_id: int) -> dict[str, Any] | None:
+    """Return a resolved OR voided forecast to the open ledger."""
     with connect(db_path) as conn:
         cur = conn.execute(
             """

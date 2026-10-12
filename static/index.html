@@ -29,7 +29,7 @@
   <section class="kpi-row" aria-label="Key figures">
     <div class="stat-tile"><p class="stat-label">Open forecasts</p><p class="stat-value" id="stat-open">–</p></div>
     <div class="stat-tile"><p class="stat-label">Due for resolution</p><p class="stat-value" id="stat-due">–</p></div>
-    <div class="stat-tile"><p class="stat-label">Resolved</p><p class="stat-value" id="stat-resolved">–</p></div>
+    <div class="stat-tile"><p class="stat-label">Resolved</p><p class="stat-value" id="stat-resolved">–</p><p class="stat-sub" id="stat-void"></p></div>
     <div class="stat-tile"><p class="stat-label">Brier score</p><p class="stat-value" id="stat-brier">–</p><p class="stat-sub">lower is better · 0.25 = coin flip</p><p class="stat-sub" id="stat-brier-modes"></p></div>
   </section>
 
@@ -41,6 +41,7 @@
           <button type="button" role="tab" data-status="open" aria-selected="true">Open</button>
           <button type="button" role="tab" data-status="due" aria-selected="false">Due</button>
           <button type="button" role="tab" data-status="resolved" aria-selected="false">Resolved</button>
+          <button type="button" role="tab" data-status="void" aria-selected="false">Void</button>
           <button type="button" role="tab" data-status="all" aria-selected="false">All</button>
         </div>
         <label class="cat-filter">Category

@@ -72,6 +72,14 @@ it produces.
   ratios never resolve forecasts — they only inform them. GDELT also
   rate-limits: a throttled pull is skipped, noted on the scan, and never
   blocks forecasting.
+- **Resolution only works near the horizon.** The resolution assistant judges
+  against live feeds, and news ages out within days. Run daily, each forecast
+  is examined while its evidence still circulates; leave the system dormant
+  and those forecasts become manual-only. A seven-week gap in August–October
+  2026 left six overdue forecasts that the oracle could not resolve at all —
+  it correctly returned "unresolved" twelve times rather than guessing, which
+  is the right failure, but it is a failure. The daily schedule is
+  load-bearing, not a convenience.
 - **Timezones and horizons.** Horizon dates are calendar dates without timezone
   semantics; "by date X" resolution is user judgment.
 - **No retention policy.** Articles and predictions accumulate indefinitely in

@@ -343,6 +343,8 @@ function renderStats() {
   document.getElementById("stat-resolved").textContent = String(s.resolved);
   document.getElementById("stat-brier").textContent =
     s.brier === null ? "–" : s.brier.toFixed(3);
+  const voidEl = document.getElementById("stat-void");
+  voidEl.textContent = s.void ? `+${s.void} voided — not scored` : "";
   const parts = [];
   for (const [mode, m] of Object.entries(s.by_mode || {})) {
     if (m.brier !== null) parts.push(`${mode} ${m.brier.toFixed(2)}`);
@@ -357,6 +359,7 @@ function visiblePredictions() {
   if (state.filterStatus === "open") preds = preds.filter((p) => p.status === "open");
   else if (state.filterStatus === "due") preds = preds.filter((p) => p.due);
   else if (state.filterStatus === "resolved") preds = preds.filter((p) => p.status === "resolved");
+  else if (state.filterStatus === "void") preds = preds.filter((p) => p.status === "void");
   if (state.filterCategory !== "all") {
     preds = preds.filter((p) => p.category === state.filterCategory);
   }
@@ -413,6 +416,10 @@ function forecastCard(p) {
         : el("span", "badge-miss", "✗ did not happen")
     );
   }
+  if (p.status === "void") {
+    card.classList.add("is-void");
+    meta.appendChild(el("span", "badge-void", "⊘ void — not scored"));
+  }
   card.appendChild(meta);
 
   card.appendChild(el("p", "fc-statement", p.statement));
@@ -464,6 +471,12 @@ function forecastCard(p) {
   if (p.status === "open" && p.proposal_outcome !== null && p.proposal_outcome !== undefined) {
     card.appendChild(proposalBlock(p, card));
   }
+  if (p.status === "void" && p.resolution_note) {
+    const note = el("p", "fc-void-note");
+    note.appendChild(el("strong", null, "Voided: "));
+    note.appendChild(document.createTextNode(p.resolution_note));
+    card.appendChild(note);
+  }
   if (p.status === "resolved" && p.resolution_note) {
     card.appendChild(el("p", "fc-resolution-note", p.resolution_note));
     if (p.resolution_evidence && p.resolution_evidence.length) {
@@ -480,6 +493,9 @@ function forecastCard(p) {
     const no = el("button", "btn-ghost", "Did not happen");
     no.addEventListener("click", () =>
       cardAction(card, () => postJSON(`/api/predictions/${p.id}/resolve`, { outcome: false, note: "" })));
+    const voidBtn = el("button", "btn-ghost", "Void");
+    voidBtn.title = "Retire this forecast unscored — for statements too vague to settle";
+    voidBtn.addEventListener("click", () => openVoidForm(card, p.id, actions));
     const checkNow = el("button", "btn-ghost fc-check-now", "Check now");
     checkNow.title = "Ask the oracle to check the news for this forecast and update it";
     checkNow.disabled = state.runInProgress; // one model run at a time
@@ -492,7 +508,7 @@ function forecastCard(p) {
         }
         msg.textContent = `⚠ ${message}`;
       }));
-    actions.append(yes, no, checkNow);
+    actions.append(yes, no, voidBtn, checkNow);
   } else {
     const reopen = el("button", "btn-ghost", "Reopen");
     reopen.addEventListener("click", () =>
@@ -549,6 +565,32 @@ function proposalBlock(p, card) {
   actions.append(accept, dismiss);
   box.appendChild(actions);
   return box;
+}
+
+function openVoidForm(card, predId, actions) {
+  if (card.querySelector(".void-form")) return; // already open
+  for (const b of actions.querySelectorAll("button")) b.disabled = true;
+  const form = el("div", "void-form");
+  const input = document.createElement("input");
+  input.type = "text";
+  input.maxLength = 2000;
+  input.placeholder = "Why can't this be scored? (e.g. \"a major European city\" is unresolvable)";
+  const confirm = el("button", "btn-ghost", "Confirm void");
+  const cancel = el("button", "btn-ghost", "Cancel");
+  const submit = () => {
+    const reason = input.value.trim();
+    if (!reason) { input.focus(); return; }
+    cardAction(card, () => postJSON(`/api/predictions/${predId}/void`, { reason }));
+  };
+  confirm.addEventListener("click", submit);
+  input.addEventListener("keydown", (ev) => { if (ev.key === "Enter") submit(); });
+  cancel.addEventListener("click", () => {
+    form.remove();
+    for (const b of actions.querySelectorAll("button")) b.disabled = state.runInProgress;
+  });
+  form.append(input, confirm, cancel);
+  card.appendChild(form);
+  input.focus();
 }
 
 async function cardAction(card, action) {
