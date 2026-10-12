@@ -173,6 +173,61 @@ def test_prune_never_touches_resolved_forecasts(cli_env: Path) -> None:
     assert store.delete_open_predictions(settings.db_path, [ids["dup"]]) == 0
 
 
+def test_backup_snapshot_is_readable_and_pruned(
+    cli_env: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    from pythia.config import get_settings
+
+    backup_dir = cli_env / "backups"
+    monkeypatch.setenv("PYTHIA_BACKUP_DIR", str(backup_dir))
+    monkeypatch.setenv("PYTHIA_BACKUP_KEEP", "3")
+    settings = get_settings()
+    store.init_db(settings.db_path)
+    scan = store.create_scan(settings.db_path, "fake", "fake-1")
+    store.insert_prediction(
+        settings.db_path, scan_id=scan, statement="Something happens by December",
+        probability=0.5, horizon_date="2026-12-01", category="markets",
+        rationale="", evidence_ids=[],
+    )
+
+    assert cli.main(["backup"]) == 0
+    snapshots = sorted(backup_dir.glob("pythia-*.db"))
+    assert len(snapshots) == 1
+    # The snapshot must be a real, queryable ledger — not a truncated file.
+    assert [p["statement"] for p in store.list_predictions(snapshots[0])] == [
+        "Something happens by December"
+    ]
+    assert "Backed up to" in capsys.readouterr().out
+
+    # Retention keeps the newest N by filename date.
+    for day in ("2026-01-01", "2026-01-02", "2026-01-03", "2026-01-04"):
+        (backup_dir / f"pythia-{day}.db").write_bytes(b"old")
+    assert cli.main(["backup"]) == 0
+    kept = sorted(p.name for p in backup_dir.glob("pythia-*.db"))
+    assert len(kept) == 3
+    assert kept[-1].startswith("pythia-20")  # today's survives as the newest
+
+
+def test_backup_failure_never_stops_the_daily_run(
+    cli_env: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    def boom(db_path, dest):  # noqa: ANN001
+        raise OSError("disk full")
+
+    monkeypatch.setattr(store, "backup_database", boom)
+    monkeypatch.setattr(
+        pipeline, "scan_metadata", lambda s: {"provider": "fake", "model": "fake-1"}
+    )
+
+    def done(settings: Settings, scan_id: int) -> None:
+        store.update_scan(settings.db_path, scan_id, status="complete", finished=True)
+
+    monkeypatch.setattr(pipeline, "run_scan", done)
+    monkeypatch.setattr(pipeline, "run_resolution_check", done)
+    # The forecasting work still runs even when the snapshot cannot be written.
+    assert cli.main(["daily"]) == 0
+
+
 def test_cli_schedule_writes_plist_without_activating(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
 ) -> None:

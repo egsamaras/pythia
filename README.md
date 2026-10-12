@@ -102,6 +102,8 @@ Set `PYTHIA_ANTHROPIC_FALLBACKS=0` to disable.
 | `PYTHIA_DB` | `~/Library/Application Support/Pythia/pythia.db` | SQLite path |
 | `PYTHIA_MAX_RESOLUTION_FORECASTS` | `20` | open forecasts per resolution check |
 | `PYTHIA_AUTO_UPDATE` | `1` | oracle probability updates on open forecasts |
+| `PYTHIA_BACKUP_DIR` | `~/Documents/pythia-backups` | ledger snapshot directory |
+| `PYTHIA_BACKUP_KEEP` | `14` | snapshots retained |
 | `PYTHIA_GDELT` | `1` | GDELT structured signals per scan |
 | `PYTHIA_GDELT_WATCHES_FILE` | `gdelt.txt` | watch-query definitions |
 | `PYTHIA_FEEDS` | — | comma-separated RSS URLs (overrides the feeds file) |
@@ -204,6 +206,7 @@ in the project root > a built-in minimal list.
 .venv/bin/python -m pythia.cli scan          # one forecast scan
 .venv/bin/python -m pythia.cli check         # one resolution check
 .venv/bin/python -m pythia.cli daily         # check, then scan (the morning routine)
+.venv/bin/python -m pythia.cli backup        # snapshot the ledger now
 .venv/bin/python -m pythia.cli prune --dry-run   # list unusable open forecasts
 .venv/bin/python -m pythia.cli schedule --hour 7 --minute 30
 ```
@@ -214,6 +217,30 @@ prints the `launchctl load -w …` command but never activates anything itself.
 Current `PYTHIA_*` variables are captured into the agent; secrets are not.
 CLI and server share the database safely: each refuses to start a run while
 the other has one in flight.
+
+## First results
+
+The ledger's first resolutions, 12 October 2026 — four forecasts made on
+23 August by `mistral-small:22b`, resolved against the public record:
+
+| Forecast | Said | Outcome |
+|---|---|---|
+| EU imposes new sanctions on Iran by 15 Sep | 65% | did not happen |
+| France delivers interceptor missiles to Ukraine by 15 Sep | 75% | did not happen |
+| EU imposes new sanctions on Russia by 30 Sep | 65% | happened |
+| EU does *not* impose new sanctions on Iran by 30 Sep | 40% | happened |
+
+**Brier score 0.367.** A coin flip scores 0.25, so the system's first measured
+verdict on itself is *worse than chance*. Hit rate 1 in 4. Every miss runs the
+same way — confident that a proposed diplomatic action would occur — and the
+one hit was the EU's most routine, highest-base-rate activity. Two further
+forecasts were [voided](#voiding-an-unscoreable-forecast) as unscoreable
+rather than guessed.
+
+Four data points carry no statistical weight, and the calibration feedback
+loop stays silent until thirty. But the number is real, it is published here
+rather than buried, and that is the entire argument of the project: a
+forecasting system that cannot embarrass itself isn't measuring anything.
 
 ## Voiding an unscoreable forecast
 
@@ -252,6 +279,21 @@ future event. Mid-size local models comply unevenly, so the rules are
 Forecasts stored before those gates existed can be retired with
 `pythia.cli prune` (`--dry-run` lists them first). Resolved forecasts are
 never touched: the ledger's history is append-only.
+
+## Backups
+
+The ledger is the one thing here that cannot be reconstructed — forecasts are
+tied to the news batch and the moment they were made, and resolutions carry
+researched evidence. The daily run snapshots it to `~/Documents/pythia-backups`
+before doing anything else, keeping the most recent 14 and pruning the rest;
+`pythia.cli backup` does the same on demand.
+
+Snapshots use SQLite's backup API rather than a file copy, so a scan running
+at the same time cannot produce a torn file. They land in the cloud-synced
+Documents tree on purpose: the live database stays out of it because sync
+corrupts SQLite's WAL sidecars, but a finished snapshot is an inert file, and
+an off-machine copy is the point. Override with `PYTHIA_BACKUP_DIR` and
+`PYTHIA_BACKUP_KEEP`. A failed backup is logged and never stops the run.
 
 ## Database location
 

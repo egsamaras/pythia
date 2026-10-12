@@ -167,6 +167,28 @@ def migrate_legacy_db(legacy_path: Path, target_path: Path) -> bool:
     return True
 
 
+def backup_database(db_path: Path, dest: Path) -> Path:
+    """Write a consistent snapshot of the ledger to ``dest``.
+
+    Uses SQLite's backup API rather than a file copy, so an in-flight WAL is
+    captured correctly and a scan running concurrently cannot produce a torn
+    snapshot. The output is a static file that is never written to again,
+    which is why it is safe to keep in a cloud-synced folder even though the
+    live database deliberately is not.
+    """
+    dest.parent.mkdir(parents=True, exist_ok=True)
+    src = sqlite3.connect(f"file:{db_path}?mode=ro", uri=True)
+    try:
+        out = sqlite3.connect(dest)
+        try:
+            src.backup(out)
+        finally:
+            out.close()
+    finally:
+        src.close()
+    return dest
+
+
 # --- articles ---------------------------------------------------------------
 
 

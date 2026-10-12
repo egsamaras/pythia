@@ -18,6 +18,16 @@ PROJECT_ROOT = Path(__file__).resolve().parents[2]
 LEGACY_DB_PATH = PROJECT_ROOT / "data" / "pythia.db"
 
 
+def default_backup_dir() -> Path:
+    """Where ledger snapshots go: outside the repo, inside the synced tree.
+
+    The live database stays out of iCloud because cloud sync corrupts SQLite's
+    WAL sidecars, but a finished snapshot is an inert file, so keeping copies
+    somewhere that syncs off-machine is the point.
+    """
+    return Path.home() / "Documents" / "pythia-backups"
+
+
 def default_db_path() -> Path:
     """Default database location, outside any cloud-synced directory."""
     return Path.home() / "Library" / "Application Support" / "Pythia" / "pythia.db"
@@ -151,6 +161,8 @@ class Settings:
     max_articles_ollama: int = 30
     max_resolution_forecasts: int = 20
     auto_update_probabilities: bool = True
+    backup_dir: Path = field(default_factory=default_backup_dir)
+    backup_keep: int = 14
     gdelt_enabled: bool = True
     gdelt_timeout_s: float = 20.0
     gdelt_watches: tuple[tuple[str, str], ...] = DEFAULT_GDELT_WATCHES
@@ -179,6 +191,8 @@ def get_settings() -> Settings:
         max_articles_ollama=int(_env("MAX_ARTICLES_OLLAMA", "30")),
         max_resolution_forecasts=int(_env("MAX_RESOLUTION_FORECASTS", "20")),
         auto_update_probabilities=_env("AUTO_UPDATE", "1") not in ("0", "false", "no"),
+        backup_dir=Path(_env("BACKUP_DIR", str(default_backup_dir()))),
+        backup_keep=int(_env("BACKUP_KEEP", "14")),
         gdelt_enabled=_env("GDELT", "1") not in ("0", "false", "no"),
         gdelt_timeout_s=float(_env("GDELT_TIMEOUT_S", "20")),
         gdelt_watches=_resolve_gdelt_watches(),

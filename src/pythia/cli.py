@@ -14,6 +14,8 @@ import sys
 from pathlib import Path
 
 from pythia import dedup, pipeline, store
+from datetime import date as _date
+
 from pythia.config import (
     LEGACY_DB_PATH,
     PROJECT_ROOT,
@@ -82,8 +84,41 @@ def cmd_check(_: argparse.Namespace) -> int:
     return _run("resolution")
 
 
+def _backup(settings: Settings) -> Path | None:
+    """Snapshot the ledger, pruning to the newest ``backup_keep`` copies."""
+    dest = settings.backup_dir / f"pythia-{_date.today().isoformat()}.db"
+    try:
+        store.backup_database(settings.db_path, dest)
+    except Exception:  # noqa: BLE001 - a failed backup must not stop the run
+        logger.exception("ledger backup failed")
+        return None
+    snapshots = sorted(settings.backup_dir.glob("pythia-*.db"))
+    for stale in snapshots[: max(0, len(snapshots) - settings.backup_keep)]:
+        stale.unlink(missing_ok=True)
+    return dest
+
+
+def cmd_backup(_: argparse.Namespace) -> int:
+    """Snapshot the ledger now."""
+    settings = get_settings()
+    _prepare(settings)
+    dest = _backup(settings)
+    if dest is None:
+        print("backup failed; see the log", file=sys.stderr)
+        return 1
+    kept = sorted(settings.backup_dir.glob("pythia-*.db"))
+    print(f"Backed up to {dest} ({dest.stat().st_size:,} bytes)")
+    print(f"{len(kept)} snapshot(s) kept in {settings.backup_dir}")
+    return 0
+
+
 def cmd_daily(args: argparse.Namespace) -> int:
-    """Morning routine: propose resolutions for what's open, then scan."""
+    """Morning routine: snapshot the ledger, propose resolutions, then scan."""
+    settings = get_settings()
+    _prepare(settings)
+    dest = _backup(settings)
+    if dest is not None:
+        print(f"ledger backed up to {dest}")
     check_rc = _run("resolution")
     scan_rc = _run("forecast")
     return max(check_rc, scan_rc)
@@ -183,6 +218,7 @@ def main(argv: list[str] | None = None) -> int:
     sub.add_parser("daily", help="resolution check, then forecast scan").set_defaults(
         func=cmd_daily
     )
+    sub.add_parser("backup", help="snapshot the ledger now").set_defaults(func=cmd_backup)
     prune = sub.add_parser(
         "prune", help="retire open forecasts today's validation would refuse"
     )
